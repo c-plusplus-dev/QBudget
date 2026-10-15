@@ -206,17 +206,19 @@ std::vector<std::byte> Reader::readBytes(std::size_t count) {
     return result;
 }
 
-std::string Reader::readString(std::size_t length) {
-    if (length == 0) {
-        const std::uint64_t storedLength = read64();
+std::string Reader::readString() {
+    const std::uint64_t storedLength = read64();
 
-        if (storedLength > std::numeric_limits<std::size_t>::max()) {
-            throw std::length_error("String is too large");
-        }
-
-        length = static_cast<std::size_t>(storedLength);
+    if (storedLength > std::numeric_limits<std::size_t>::max()) {
+        throw std::length_error("String is too large");
     }
 
+    auto length = static_cast<std::size_t>(storedLength);
+
+    return readString(length);
+}
+
+std::string Reader::readString(std::size_t length) {
     require(length);
 
     std::string result(length, '\0');

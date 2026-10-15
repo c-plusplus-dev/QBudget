@@ -13,7 +13,7 @@ void Block::Item::writeTo(Writer& writer) const {
 
 Block::Item Block::Item::readFrom(Reader& reader) {
     Item item{};
-    item.name = reader.readString(0);
+    item.name = reader.readString();
     item.cost = reader.readS32();
     return item;
 }
@@ -36,7 +36,7 @@ void Block::writeTo(Writer& writer) const {
 
 Block Block::readFrom(Reader& reader) {
     Block block{};
-    block.name = reader.readString(0);
+    block.name = reader.readString();
     uint64_t length = reader.read64();
     for (uint64_t i = 0; i < length; i++)
         block.items.push_back(std::move(Item::readFrom(reader)));

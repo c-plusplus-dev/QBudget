@@ -42,7 +42,8 @@ public:
     [[nodiscard]] std::int64_t readS64();
 
     [[nodiscard]] std::vector<std::byte> readBytes(std::size_t count);
-    // if length is zero, it will read a uint64 for the length instead.
+
+    [[nodiscard]] std::string readString();
     [[nodiscard]] std::string readString(std::size_t length);
 
     void skipBytes(std::size_t count);

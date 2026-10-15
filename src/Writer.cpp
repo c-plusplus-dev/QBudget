@@ -137,26 +137,61 @@ void Writer::save(const std::filesystem::path& path) const {
         throw std::runtime_error("Binary data is too large to save");
     }
 
-    std::ofstream file(path, std::ios::binary | std::ios::trunc);
-
-    if (!file) {
-        throw std::runtime_error(
-            "Failed to open file for writing: " + path.string()
-        );
+    if (path.empty()) {
+        throw std::invalid_argument("Output path cannot be empty");
     }
 
-    if (!_bytes.empty()) {
-        file.write(
-            reinterpret_cast<const char*>(_bytes.data()),
-            static_cast<std::streamsize>(_bytes.size())
+    const std::filesystem::path temporaryPath =
+        path.parent_path() /
+        (path.filename().string() + ".tmp");
+
+    // Write to a temporary file instead of immediately truncating
+    // the destination file.
+    {
+        std::ofstream file(
+            temporaryPath,
+            std::ios::binary | std::ios::trunc
         );
+
+        if (!file) {
+            throw std::runtime_error(
+                "Failed to open temporary file for writing: " +
+                temporaryPath.string()
+            );
+        }
+
+        if (!_bytes.empty()) {
+            file.write(
+                reinterpret_cast<const char*>(_bytes.data()),
+                static_cast<std::streamsize>(_bytes.size())
+            );
+        }
+
+        file.close();
+
+        if (!file) {
+            std::error_code error;
+            std::filesystem::remove(temporaryPath, error);
+
+            throw std::runtime_error(
+                "Failed to write complete temporary file: " +
+                temporaryPath.string()
+            );
+        }
     }
 
-    file.close();
+    // Replace the destination only after the temporary file is complete.
+    std::error_code error;
 
-    if (!file) {
+    std::filesystem::rename(temporaryPath, path, error);
+
+    if (error) {
+        std::error_code cleanupError;
+        std::filesystem::remove(temporaryPath, cleanupError);
+
         throw std::runtime_error(
-            "Failed to write complete file: " + path.string()
+            "Failed to replace destination file '" +
+            path.string() + "': " + error.message()
         );
     }
 }

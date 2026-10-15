@@ -14,6 +14,8 @@ add_executable(QBudget
         src/Reader.h
         src/Writer.cpp
         src/Writer.h
+        src/Database.cpp
+        src/Database.h
 )
 
 target_include_directories(QBudget PUBLIC

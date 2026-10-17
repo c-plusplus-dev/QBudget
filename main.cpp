@@ -2,98 +2,154 @@
 // Created by Ayaan on 2026-10-15.
 //
 
-#include "Block.h"
-#include "Reader.h"
-#include "Writer.h"
+#include <Q-Tip/QTip.h>
+#include <QTipUIKit/UIKit.h>
+#include <QTipUIKit/Containers/List.h>
+#include <QTipUIKit/Containers/ScrollView.h>
 
-#include <filesystem>
-#include <iostream>
-#include <stdexcept>
-#include <string>
+#include "Storage/Database.h"
+#include "UI/BlockView.h"
+#include "Helpers.h"
+#include "UI/Spacer.h"
+using namespace QTip;
 
 int main() {
-    try {
-        const std::filesystem::path path = "block_test.qbdb";
+    ModLoader::load<UIKitMod>();
 
-        // Create test data.
-        Block original;
-        original.name = "Monthly expenses";
+    Window window("QBudget", 800, 600);
+    auto [WIDTH, HEIGHT] = window.size();
 
-        original.items.push_back({"Food", 450});
-        original.items.push_back({"Transport", 125});
-        original.items.push_back({"Games", 600});
-        original.items.push_back({"Savings", -200});
+    Font font("assets/JetBrainsMono-Regular.ttf", 16);
 
-        std::cout << "Original block: " << original.name << '\n';
-        std::cout << "Original items: " << original.items.size() << '\n';
-        std::cout << "Original total: " << original.total() << "\n\n";
+    Database db = Database::load("example.qbdb");
 
-        // Serialize the block and save it to disk.
-        Writer writer;
-        original.writeTo(writer);
-        writer.save(path);
+    Panel root({0, 0, 800, 600});
 
-        std::cout << "Saved to: "
-                  << std::filesystem::absolute(path).string()
-                  << '\n';
+    auto& blockView = root.add<ScrollView>(Rect{10, 10, WIDTH - 50, HEIGHT - 40}, ScrollViewSettings{.showScrollbar = false});
+    auto& blockList = blockView.add<List>(Rect{0, 0, WIDTH - 50, 100});
+    blockList.setSpacing(10.0f);
 
-        // Load the saved file and deserialize the block.
-        Reader reader(path);
-        Block loaded = Block::readFrom(reader);
+    std::vector<BlockView*> blocks{};
+    std::vector<BlockView*> blocksToDelete;
+    blocks.reserve(db.blocks().size());
+    for (auto& block : db.blocks()) {
+        blocks.push_back(&blockList.add<BlockView>(Rect{0, 0, WIDTH - 50, 100}, block, font,
+            [&](BlockView& view) { // expand
+                const float height = view.expanded ? HEIGHT - 100.0f : 100.0f;
 
-        // Verify the deserialized data.
-        if (loaded.name != original.name) {
-            throw std::runtime_error("Block name does not match");
-        }
+                view.resize({WIDTH - 50.0f, height});
 
-        if (loaded.items.size() != original.items.size()) {
-            throw std::runtime_error("Item count does not match");
-        }
+                blockList.updateLayout();
+                blockView.setContentSize(blockList.rect().size);
 
-        for (std::size_t i = 0; i < original.items.size(); ++i) {
-            const auto& expected = original.items[i];
-            const auto& actual = loaded.items[i];
+                if (view.expanded) {
+                    blockView.setScrollSpeed(0);
+                    auto it = std::ranges::find(blocks, &view);
 
-            if (actual.name != expected.name) {
-                throw std::runtime_error(
-                    "Item name does not match at index "
-                    + std::to_string(i)
-                );
+                    if (it != blocks.end()) {
+                        std::size_t index = it - blocks.begin();
+                        blockView.scrollTo({0, static_cast<float>(index) * 110.0f});
+                    }
+                } else
+                    blockView.setScrollSpeed(30);
+            },
+            [&](BlockView& view) { // delete
+                Dialog& dialog = Dialog::create(window);
+
+                auto& content = dialog.content();
+                auto& buttons = dialog.buttons();
+
+                content.add<Label>("Are you sure?", Color::white, Point{0, 0}, font);
+                content.add<Label>(fmt("You're about to delete a block called: \"%s\"", view.block().name.c_str()), Color::white, Point{0, 32}, font);
+
+                ButtonStyle style;
+                style.color = {50, 50, 50};
+                style.hoverColor = {70, 70, 70};
+                style.pressedColor = {30, 30, 30};
+                style.font = font;
+                style.fontColor = Color::white;
+
+                auto& cancel = buttons.add<Button>(Rect{0, 0, 100, 100}, "Cancel", style);
+
+                cancel.setOnClick([&] {
+                    dialog.close();
+                });
+
+                style.color = {255, 0, 0};
+                style.hoverColor = {255, 64, 64};
+                style.pressedColor = {255, 128, 128};
+
+                auto& delete_ = buttons.add<Button>(Rect{0, 0, 100, 100}, "Delete", style);
+
+                delete_.setOnClick([&] {
+                    blocksToDelete.push_back(&view);
+                    dialog.close();
+                });
             }
-
-            if (actual.cost != expected.cost) {
-                throw std::runtime_error(
-                    "Item cost does not match at index "
-                    + std::to_string(i)
-                );
-            }
-        }
-
-        if (loaded.total() != original.total()) {
-            throw std::runtime_error("Block total does not match");
-        }
-
-        if (!reader.atEnd()) {
-            throw std::runtime_error(
-                "Unexpected trailing bytes after the block"
-            );
-        }
-
-        // Display the loaded data.
-        std::cout << "\nLoaded block: " << loaded.name << '\n';
-        std::cout << "Loaded items:\n";
-
-        for (const auto& item : loaded.items) {
-            std::cout << "  " << item.name
-                      << ": " << item.cost << '\n';
-        }
-
-        std::cout << "Loaded total: " << loaded.total() << "\n\n";
-        std::cout << "PASS: Block saving and loading work correctly.\n";
-
-        return 0;
-    } catch (const std::exception& exception) {
-        std::cerr << "FAIL: " << exception.what() << '\n';
-        return 1;
+        ));
     }
+
+    blockList.add<Spacer>(Rect{WIDTH - 50, 60.0f});
+
+    blockView.setContentSize(blockList.rect().size);
+
+    auto& bottomTotal = root.add<Label>("Total: NaNkr | Date: NaN", Color::white, Point{10, HEIGHT - 26}, font);
+
+    auto oldWindowSize = Point{-1, -1};
+    while (!window.shouldClose()) {
+        QTipRuntime::pollEvents();
+
+        for (BlockView* block : blocksToDelete) {
+            auto it = std::ranges::find(blocks, block);
+
+            if (it == blocks.end())
+                continue;
+
+            blockList.remove(*block);
+            blocks.erase(it);
+        }
+
+        if (!blocksToDelete.empty()) {
+            blockList.updateLayout();
+            blockView.setContentSize(blockList.rect().size);
+        }
+
+        blocksToDelete.clear();
+
+        if (window.size() != oldWindowSize) {
+            oldWindowSize = window.size();
+            auto size = oldWindowSize;
+            WIDTH = size.x;
+            HEIGHT = size.y;
+
+            root.resize(size);
+
+            blockView.resize({WIDTH - 50, HEIGHT - 40});
+
+            for (auto block : blocks) {
+                if (block->expanded)
+                    block->resize({WIDTH - 50, HEIGHT - 100.0f});
+                else
+                    block->resize({WIDTH - 50, 100});
+            }
+
+            bottomTotal.reposition({10, HEIGHT - 26});
+
+            blockList.resize({WIDTH - 50, blockList.rect().size.y});
+            blockList.updateLayout();
+
+            blockView.setContentSize(blockList.rect().size);
+        }
+
+        window->setRenderColor({20, 20, 20});
+        window->clear();
+
+        root.render(window);
+
+        DrawScrollGradient(window, WIDTH - 50, 10, HEIGHT - 90, 60, {20, 20, 20});
+
+        window->present();
+    }
+
+    return 0;
 }

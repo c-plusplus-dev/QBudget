@@ -4,8 +4,8 @@
 
 #include "Database.h"
 
-#include "Reader.h"
-#include "Writer.h"
+#include "IO/Reader.h"
+#include "IO/Writer.h"
 
 #include <cstdint>
 #include <limits>

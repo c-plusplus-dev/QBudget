@@ -1,0 +1,53 @@
+//
+// Created by Ayaan on 2026-10-15.
+//
+
+#ifndef QBUDGET_BLOCKVIEW_H
+#define QBUDGET_BLOCKVIEW_H
+
+#include <QTipUIKit/UIKit.h>
+
+#include "Storage/Block.h"
+
+class BlockView : public UIObject {
+public:
+    using OnExpandRequested = std::function<void(BlockView&)>;
+    using OnDeleteRequested = std::function<void(BlockView&)>;
+
+    // requires the block to stay alive for the lifetime of BlockView
+    explicit BlockView(QTip::Rect rect, Block& block, QTip::Font& font, OnExpandRequested expandRequested, OnDeleteRequested deleteRequested);
+
+    ~BlockView() override = default;
+
+    [[nodiscard]] const Block& block() const;
+
+    bool handleEvent(const SDL_Event& event) override;
+
+    [[nodiscard]] QTip::Point minimumSize() const override;
+    [[nodiscard]] QTip::Point preferredSize() const override;
+
+    void resize(QTip::Point size) override;
+    void reposition(QTip::Point position) override;
+    void setRect(QTip::Rect rect) override;
+    [[nodiscard]] const QTip::Rect& rect() override;
+
+    bool expanded = false;
+
+protected:
+    void renderImpl(QTip::Window& window) override;
+
+private:
+    void onResize() const;
+
+    Block* _block = nullptr;
+
+    std::unique_ptr<Button> _delete;
+    std::unique_ptr<Button> _expand;
+
+    OnExpandRequested _expandRequested;
+    OnDeleteRequested _deleteRequested;
+
+    QTip::Font& _font;
+};
+
+#endif //QBUDGET_BLOCKVIEW_H

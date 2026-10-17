@@ -8,14 +8,19 @@ find_package(QTipUIKit REQUIRED)
 
 add_executable(QBudget
         main.cpp
-        src/Block.cpp
-        src/Block.h
-        src/Reader.cpp
-        src/Reader.h
-        src/Writer.cpp
-        src/Writer.h
-        src/Database.cpp
-        src/Database.h
+        src/Storage/Block.cpp
+        src/Storage/Block.h
+        src/IO/Reader.cpp
+        src/IO/Reader.h
+        src/IO/Writer.cpp
+        src/IO/Writer.h
+        src/Storage/Database.cpp
+        src/Storage/Database.h
+        src/UI/BlockView.cpp
+        src/UI/BlockView.h
+        src/Helpers.h
+        src/UI/Spacer.cpp
+        src/UI/Spacer.h
 )
 
 target_include_directories(QBudget PUBLIC

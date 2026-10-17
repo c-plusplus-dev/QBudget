@@ -3,8 +3,8 @@
 //
 
 #include "Block.h"
-#include "Reader.h"
-#include "Writer.h"
+#include "IO/Reader.h"
+#include "IO/Writer.h"
 
 void Block::Item::writeTo(Writer& writer) const {
     writer.writeString(name);

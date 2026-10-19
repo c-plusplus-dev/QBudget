@@ -1,152 +1,177 @@
-//
-// Created by Ayaan on 2026-10-15.
-//
-
 #include <Q-Tip/QTip.h>
 #include <QTipUIKit/UIKit.h>
-#include <QTipUIKit/Containers/List.h>
-#include <QTipUIKit/Containers/ScrollView.h>
+#include <QTipUIKit/Containers/Panel.h>
+
+#include <cinttypes>
+#include <cstdio>
+#include <memory>
 
 #include "Storage/Database.h"
-#include "UI/BlockView.h"
+#include "UI/BlockScreen.h"
+#include "UI/MagickButton.h"
+#include "UI/ScreenManager.h"
 #include "Helpers.h"
-#include "UI/Spacer.h"
+
 using namespace QTip;
+
+constexpr int INITIAL_WIDTH = 800;
+constexpr int INITIAL_HEIGHT = 600;
+constexpr int NAVIGATION_WIDTH = 40;
+constexpr int NAVIGATION_BUTTON_SIZE = 30;
+constexpr int NAVIGATION_BUTTON_SPACING = 10;
 
 int main() {
     ModLoader::load<UIKitMod>();
 
-    Window window("QBudget", 800, 600);
-    auto [WIDTH, HEIGHT] = window.size();
-
+    Window window("QBudget", INITIAL_WIDTH, INITIAL_HEIGHT);
     Font font("assets/JetBrainsMono-Regular.ttf", 16);
 
-    Database db = Database::load("example.qbdb");
+    Database database = Database::load("example.qbdb");
 
-    Panel root({0, 0, 800, 600});
+    auto [width, height] = window.size();
 
-    auto& blockView = root.add<ScrollView>(Rect{10, 10, WIDTH - 50, HEIGHT - 40}, ScrollViewSettings{.showScrollbar = false});
-    auto& blockList = blockView.add<List>(Rect{0, 0, WIDTH - 50, 100});
-    blockList.setSpacing(10.0f);
+    Panel root({0, 0, width, height});
 
-    std::vector<BlockView*> blocks{};
-    std::vector<BlockView*> blocksToDelete;
-    blocks.reserve(db.blocks().size());
-    for (auto& block : db.blocks()) {
-        blocks.push_back(&blockList.add<BlockView>(Rect{0, 0, WIDTH - 50, 100}, block, font,
-            [&](BlockView& view) { // expand
-                const float height = view.expanded ? HEIGHT - 100.0f : 100.0f;
+    // The screen manager occupies the main area, leaving room for navigation.
+    auto& screens = root.add<ScreenManager>(
+        Rect{0, 0, width - NAVIGATION_WIDTH, height}
+    );
 
-                view.resize({WIDTH - 50.0f, height});
+    screens.push<BlockScreen>(
+        Rect{0, 0, width - NAVIGATION_WIDTH, height},
+        window,
+        database,
+        font
+    );
 
-                blockList.updateLayout();
-                blockView.setContentSize(blockList.rect().size);
+    // Navigation controls stay outside the screen manager.
+    Panel& navigation = root.add<Panel>(
+        Rect{
+            width - NAVIGATION_BUTTON_SIZE - 5,
+            10,
+            NAVIGATION_BUTTON_SIZE,
+            height - 20
+        }
+    );
 
-                if (view.expanded) {
-                    blockView.setScrollSpeed(0);
-                    auto it = std::ranges::find(blocks, &view);
+    const auto addNavigationButton = [&](int y, auto drawCallback) {
+        navigation.add<MagickButton>(
+            Rect{0, y, NAVIGATION_BUTTON_SIZE, NAVIGATION_BUTTON_SIZE},
+            MagickButton::Style{},
+            drawCallback
+        );
+    };
 
-                    if (it != blocks.end()) {
-                        std::size_t index = it - blocks.begin();
-                        blockView.scrollTo({0, static_cast<float>(index) * 110.0f});
-                    }
-                } else
-                    blockView.setScrollSpeed(30);
-            },
-            [&](BlockView& view) { // delete
-                Dialog& dialog = Dialog::create(window);
+    // Pie-chart navigation button.
+    addNavigationButton(
+        0,
+        [](Window& target, const Rect& rect) {
+            const int centerX = rect.x + rect.size.x / 2;
+            const int centerY = rect.y + rect.size.y / 2;
+            const int radius = rect.size.x / 3;
 
-                auto& content = dialog.content();
-                auto& buttons = dialog.buttons();
+            target.setRenderColor({220, 220, 220});
+            DrawPieSlice(
+                target,
+                {centerX, centerY},
+                radius,
+                0.0,
+                270.0
+            );
+        }
+    );
 
-                content.add<Label>("Are you sure?", Color::white, Point{0, 0}, font);
-                content.add<Label>(fmt("You're about to delete a block called: \"%s\"", view.block().name.c_str()), Color::white, Point{0, 32}, font);
+    // Month-view navigation button.
+    addNavigationButton(
+        NAVIGATION_BUTTON_SIZE + NAVIGATION_BUTTON_SPACING,
+        [](Window& target, const Rect& rect) {
+            target.setRenderColor({220, 220, 220});
 
-                ButtonStyle style;
-                style.color = {50, 50, 50};
-                style.hoverColor = {70, 70, 70};
-                style.pressedColor = {30, 30, 30};
-                style.font = font;
-                style.fontColor = Color::white;
+            target->renderRect({
+                rect.x + 5,
+                rect.y + 6,
+                rect.size.x - 10,
+                rect.size.y - 11
+            });
 
-                auto& cancel = buttons.add<Button>(Rect{0, 0, 100, 100}, "Cancel", style);
+            target->renderLine(
+                {rect.x + 5, rect.y + 12},
+                {rect.x + rect.size.x - 5, rect.y + 12}
+            );
 
-                cancel.setOnClick([&] {
-                    dialog.close();
-                });
+            target->renderLine(
+                {rect.x + 10, rect.y + 3},
+                {rect.x + 10, rect.y + 9}
+            );
 
-                style.color = {255, 0, 0};
-                style.hoverColor = {255, 64, 64};
-                style.pressedColor = {255, 128, 128};
+            target->renderLine(
+                {rect.x + rect.size.x - 10, rect.y + 3},
+                {rect.x + rect.size.x - 10, rect.y + 9}
+            );
+        }
+    );
 
-                auto& delete_ = buttons.add<Button>(Rect{0, 0, 100, 100}, "Delete", style);
+    // Bar-chart navigation button.
+    addNavigationButton(
+        2 * (NAVIGATION_BUTTON_SIZE + NAVIGATION_BUTTON_SPACING),
+        [](Window& target, const Rect& rect) {
+            target.setRenderColor({220, 220, 220});
 
-                delete_.setOnClick([&] {
-                    blocksToDelete.push_back(&view);
-                    dialog.close();
-                });
-            }
-        ));
-    }
+            const int bottom = rect.y + rect.size.y - 5;
 
-    blockList.add<Spacer>(Rect{WIDTH - 50, 60.0f});
+            target->renderRect({
+                rect.x + 5,
+                bottom - 8,
+                5,
+                8
+            });
 
-    blockView.setContentSize(blockList.rect().size);
+            target->renderRect({
+                rect.x + 13,
+                bottom - 15,
+                5,
+                15
+            });
 
-    auto& bottomTotal = root.add<Label>("Total: NaNkr | Date: NaN", Color::white, Point{10, HEIGHT - 26}, font);
+            target->renderRect({
+                rect.x + 21,
+                bottom - 21,
+                5,
+                21
+            });
+        }
+    );
 
-    auto oldWindowSize = Point{-1, -1};
-    while (!window.shouldClose()) {
+    while (window.isOpen()) {
         QTipRuntime::pollEvents();
 
-        for (BlockView* block : blocksToDelete) {
-            auto it = std::ranges::find(blocks, block);
+        const auto [newWidth, newHeight] = window.size();
 
-            if (it == blocks.end())
-                continue;
+        if (newWidth != width || newHeight != height) {
+            width = newWidth;
+            height = newHeight;
 
-            blockList.remove(*block);
-            blocks.erase(it);
-        }
+            root.setRect({0, 0, width, height});
 
-        if (!blocksToDelete.empty()) {
-            blockList.updateLayout();
-            blockView.setContentSize(blockList.rect().size);
-        }
+            screens.setRect({
+                0,
+                0,
+                width - NAVIGATION_WIDTH,
+                height
+            });
 
-        blocksToDelete.clear();
-
-        if (window.size() != oldWindowSize) {
-            oldWindowSize = window.size();
-            auto size = oldWindowSize;
-            WIDTH = size.x;
-            HEIGHT = size.y;
-
-            root.resize(size);
-
-            blockView.resize({WIDTH - 50, HEIGHT - 40});
-
-            for (auto block : blocks) {
-                if (block->expanded)
-                    block->resize({WIDTH - 50, HEIGHT - 100.0f});
-                else
-                    block->resize({WIDTH - 50, 100});
-            }
-
-            bottomTotal.reposition({10, HEIGHT - 26});
-
-            blockList.resize({WIDTH - 50, blockList.rect().size.y});
-            blockList.updateLayout();
-
-            blockView.setContentSize(blockList.rect().size);
+            navigation.setRect({
+                width - NAVIGATION_BUTTON_SIZE - 5,
+                10,
+                NAVIGATION_BUTTON_SIZE,
+                height - 20
+            });
         }
 
         window->setRenderColor({20, 20, 20});
         window->clear();
 
         root.render(window);
-
-        DrawScrollGradient(window, WIDTH - 50, 10, HEIGHT - 90, 60, {20, 20, 20});
 
         window->present();
     }

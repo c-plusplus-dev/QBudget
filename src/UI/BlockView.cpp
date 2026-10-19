@@ -12,7 +12,7 @@ BlockView::BlockView(Rect rect, Block& block, Font& font, OnExpandRequested expa
     _preferredRect = rect;
 
     ButtonStyle style;
-    style.color = {30, 30, 30};
+    style.color = Color::clear;
     style.hoverColor = {40, 40, 40};
     style.pressedColor = {50, 50, 50};
     style.font = font;
@@ -87,13 +87,11 @@ void BlockView::renderImpl(Window& window) {
 
     window->renderText(_font, fmt("%skr", std::to_string(_block->total()).c_str()).c_str(), _rect.origin.x + 10, _rect.origin.y + _rect.size.y - 26, Color::white);
 
-    window->setBlendMode(RenderBlendMode::Blend);
     _delete->render(window);
     _expand->render(window);
-    window->resetBlendMode();
 }
 
 void BlockView::onResize() const {
-    _expand->reposition({_rect.origin.x + _rect.size.x - 40, _rect.origin.y + 10});
-    _delete->reposition({_rect.origin.x + _rect.size.x - 80, _rect.origin.y + 10});
+    _expand->reposition({_rect.origin.x + _rect.size.x - 35, _rect.origin.y + 5});
+    _delete->reposition({_rect.origin.x + _rect.size.x - 70, _rect.origin.y + 5});
 }

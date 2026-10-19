@@ -26,6 +26,8 @@ public:
 
     void save(const std::filesystem::path& path) const;
 
+    [[nodiscard]] std::int64_t total() const;
+
     [[nodiscard]] static Database load(
         const std::filesystem::path& path
     );

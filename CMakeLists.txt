@@ -21,6 +21,16 @@ add_executable(QBudget
         src/Helpers.h
         src/UI/Spacer.cpp
         src/UI/Spacer.h
+        src/UI/MagickButton.cpp
+        src/UI/MagickButton.h
+        src/UI/ItemView.cpp
+        src/UI/ItemView.h
+        src/UI/Screen.cpp
+        src/UI/Screen.h
+        src/UI/ScreenManager.cpp
+        src/UI/ScreenManager.h
+        src/UI/BlockScreen.cpp
+        src/UI/BlockScreen.h
 )
 
 target_include_directories(QBudget PUBLIC

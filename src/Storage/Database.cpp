@@ -95,6 +95,14 @@ void Database::save(const std::filesystem::path& path) const {
     writer.save(path);
 }
 
+std::int64_t Database::total() const {
+    std::int64_t total = 0;
+    for (auto& block : _blocks) {
+        total += block.total();
+    }
+    return total;
+}
+
 Database Database::load(const std::filesystem::path& path) {
     Reader reader(path);
 

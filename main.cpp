@@ -164,7 +164,8 @@ public:
     }
 
     void resize(QTip::Point size) override {
-        setRect({_rect.origin.x, _rect.origin.y, size});
+        _rect.size = size;
+        setRect(_rect);
     }
 
     void reposition(QTip::Point position) override {

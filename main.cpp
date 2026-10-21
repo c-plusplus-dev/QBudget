@@ -33,7 +33,6 @@ public:
         Database& database,
         vector<BlockView*>& blocks,
         vector<BlockView*>& blocksToDelete,
-        float& width,
         float& height
     )
         : _window(window),
@@ -41,7 +40,6 @@ public:
           _database(database),
           _blocks(blocks),
           _blocksToDelete(blocksToDelete),
-          _width(width),
           _height(height),
           _scrollView(
               {10, 10, max(0.0f, rect.size.x - 20.0f),
@@ -230,7 +228,6 @@ private:
     Database& _database;
     vector<BlockView*>& _blocks;
     vector<BlockView*>& _blocksToDelete;
-    float& _width;
     float& _height;
 
     ScrollView _scrollView;
@@ -253,41 +250,34 @@ int main() {
     blocks.reserve(db.blocks().size());
 
     auto& navigation = root.add<NavigationView>(
-        Rect{0, 0, WIDTH, HEIGHT},
+        Rect{0, 0, WIDTH - 30.0f, HEIGHT},
         NavigationPosition::Right,
-        40.0f
+        0.0f
     );
 
     ButtonStyle navigationStyle;
     navigationStyle.color = Color::clear;
-    navigationStyle.hoverColor = {40, 40, 40};
-    navigationStyle.pressedColor = {50, 50, 50};
-    navigationStyle.disabledColor = {35, 35, 35};
+    navigationStyle.hoverColor = Color::clear;
+    navigationStyle.pressedColor = Color::clear;
+    navigationStyle.disabledColor = Color::clear;
     navigationStyle.font = font;
     navigationStyle.fontColor = Color::white;
 
     navigation.addView<BlocksView, MagickButton>(
         [&]() -> unique_ptr<BlocksView> {
             return make_unique<BlocksView>(
-                Rect{0, 0, WIDTH - 40.0f, HEIGHT},
+                Rect{0, 0, WIDTH - 30.0f, HEIGHT},
                 window,
                 font,
                 db,
                 blocks,
                 blocksToDelete,
-                WIDTH,
                 HEIGHT
             );
         },
         navigationStyle,
-        [](Window& w, const Rect& rect) {
-            w->setRenderColor(Color::white);
-            const float left = rect.origin.x + (rect.size.x - 18.0f) / 2.0f;
-            const float top = rect.origin.y + (rect.size.y - 18.0f) / 2.0f;
-            w->renderRect({left, top, 18.0f, 18.0f}, false);
-            w->renderLine({{left, top + 6.0f}, {left + 17.0f, top + 6.0f}});
-            w->renderLine({{left + 5.0f, top + 1.0f}, {left + 5.0f, top + 4.0f}});
-            w->renderLine({{left + 13.0f, top + 1.0f}, {left + 13.0f, top + 4.0f}});
+        [](Window&, const Rect&) {
+            // This is the sole destination, so its navigation control is hidden.
         }
     );
 
@@ -310,7 +300,7 @@ int main() {
 
     // The add action remains separate from navigation destinations.
     auto& addBlockList = root.add<List>(
-        Rect{WIDTH - 35, 50, 30, max(0.0f, HEIGHT - 60.0f)}
+        Rect{WIDTH - 35, 10, 30, max(0.0f, HEIGHT - 20.0f)}
     );
 
     ButtonStyle addStyle;
@@ -344,11 +334,11 @@ int main() {
             HEIGHT = oldWindowSize.y;
 
             root.resize(oldWindowSize);
-            navigation.resize(oldWindowSize);
+            navigation.resize({WIDTH - 30.0f, HEIGHT});
 
             bottomTotal.reposition({10, HEIGHT - 26});
-            addBlockList.reposition({WIDTH - 35, 50});
-            addBlockList.resize({30, max(0.0f, HEIGHT - 60.0f)});
+            addBlockList.reposition({WIDTH - 35, 10});
+            addBlockList.resize({30, max(0.0f, HEIGHT - 20.0f)});
         }
 
         window->setRenderColor({20, 20, 20});

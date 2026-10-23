@@ -6,26 +6,35 @@
 #define QBUDGET_HELPERS_H
 #include <Q-Tip/QTip.h>
 
-inline void DrawScrollGradient(QTip::Window& window, int width, int startX, int startY, int fadeHeight, QTip::Color bg, bool top = false) {
-    window->setBlendMode(QTip::RenderBlendMode::Blend);
+inline void DrawScrollGradient(
+    Window& window,
+    int width,
+    int startX,
+    int startY,
+    int fadeHeight,
+    Color bg,
+    bool top = false)
+{
+    if (width <= 0 || fadeHeight <= 0)
+        return;
 
-    // Gradient (fade-in/out)
-    if (!top) {
-        for (int y = 0; y < fadeHeight; y++) {
-            const float ratio = static_cast<float>(y) / static_cast<float>(fadeHeight);
-            const auto alpha = static_cast<uint8_t>(255.0f * ratio);
-            window->setRenderColor({bg.r, bg.g, bg.b, alpha});
-            const auto lineY = static_cast<float>(y + startY);
-            window->renderLine({static_cast<float>(startX), lineY, static_cast<float>(startX + width), lineY});
-        }
-    } else {
-        for (int y = 0; y < fadeHeight; y++) {
-            const float ratio = static_cast<float>(y) / static_cast<float>(fadeHeight);
-            const auto alpha = static_cast<uint8_t>(255.0f - 255.0f * ratio);
-            window->setRenderColor({bg.r, bg.g, bg.b, alpha});
-            const auto lineY = static_cast<float>(y + startY);
-            window->renderLine({static_cast<float>(startX), lineY, static_cast<float>(startX + width), lineY});
-        }
+    window->setBlendMode(RenderBlendMode::Blend);
+
+    for (int y = 0; y < fadeHeight; ++y) {
+        const float ratio = static_cast<float>(y) / static_cast<float>(fadeHeight);
+        const auto alpha = static_cast<uint8_t>(
+            255.0f * (top ? 1.0f - ratio : ratio)
+        );
+
+        window->setRenderColor({bg.r, bg.g, bg.b, alpha});
+
+        const auto lineY = static_cast<float>(startY + y);
+        window->renderLine({
+            static_cast<float>(startX),
+            lineY,
+            static_cast<float>(startX + width),
+            lineY
+        });
     }
 
     window->resetBlendMode();

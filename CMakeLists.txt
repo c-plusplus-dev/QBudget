@@ -23,6 +23,8 @@ add_executable(QBudget
         src/UI/Spacer.h
         src/UI/ItemView.cpp
         src/UI/ItemView.h
+        src/UI/BlocksView.cpp
+        src/UI/BlocksView.h
 )
 
 target_include_directories(QBudget PUBLIC

@@ -465,6 +465,37 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
 }
 
 bool PieView::handleEvent(const SDL_Event& event) {
+    // ScrollView does not forward mouse motion that occurs outside its viewport,
+    // so update the legend hover state here as well to clear it on mouse exit.
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
+        const QTip::Point mouse{
+            event.motion.x,
+            event.motion.y
+        };
+
+        std::size_t hoveredIndex = kNoEntry;
+        if (_legendScrollView.rect().isPointInside(mouse)) {
+            const QTip::Point contentMouse{
+                mouse.x - _legendScrollView.rect().origin.x
+                    + _legendScrollView.scrollPosition().x,
+                mouse.y - _legendScrollView.rect().origin.y
+                    + _legendScrollView.scrollPosition().y
+            };
+
+            for (std::size_t i = 0; i < _legendRows.size(); ++i) {
+                if (_legendRows[i]->rect().isPointInside(contentMouse)) {
+                    hoveredIndex = i;
+                    break;
+                }
+            }
+        }
+
+        if (hoveredIndex != _legendHoveredIndex) {
+            _legendHoveredIndex = hoveredIndex;
+            syncHoveredEntry(true);
+        }
+    }
+
     if (!_legendScrollView.handleEvent(event)) {
         return false;
     }

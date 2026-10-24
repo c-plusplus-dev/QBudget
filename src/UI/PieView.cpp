@@ -14,13 +14,15 @@
 
 #include <QTipUIKit/Internal/Helpers.h>
 
+#include "Spacer.h"
+
 namespace {
 
 constexpr float kPadding = 10.0f;
 constexpr float kGap = 15.0f;
 constexpr float kLegendRowHeight = 58.0f;
 constexpr float kExpandedLegendRowHeight = 86.0f;
-constexpr float kLegendScrollMargin = 12.0f;
+constexpr float kLegendScrollMargin = 20.0f;
 constexpr float kHoverAnimationSpeed = 8.0f;
 constexpr float kScrollAnimationSpeed = 10.0f;
 
@@ -90,12 +92,6 @@ protected:
     void renderImpl(QTip::Window& window) override {
         constexpr float normalSwatchSize = 24.0f;
         const float swatchSize = normalSwatchSize + 6.0f * _expandProgress;
-
-        if (_expandProgress > 0.001f) {
-            const auto alpha = static_cast<std::uint8_t>(45.0f * _expandProgress);
-            window->setRenderColor(QTip::Color{45, 45, 45, alpha});
-            window->renderRoundedRect(_rect, 6);
-        }
 
         const QTip::Rect swatch{
             _rect.origin.x + 8.0f,
@@ -204,7 +200,7 @@ PieView::PieView(
           ScrollViewSettings{
               .direction = ScrollDirection::Vertical,
               .scrollSpeed = 30.0f,
-              .showScrollbar = true
+              .showScrollbar = false
           }
       ),
       _chart(
@@ -222,7 +218,7 @@ PieView::PieView(
 
     _chart->setTooltipRenderer(
         [](QTip::Window& window,
-           QTip::Font font,
+           const QTip::Font& font,
            Block& block,
            double value,
            double percent,
@@ -325,9 +321,7 @@ void PieView::rebuildData() {
     _expandedIndex = kNoEntry;
     _rowExpandProgress.assign(_entries.size(), 0.0f);
 
-    for (std::size_t i = 0; i < _entries.size(); ++i) {
-        const Entry& entry = _entries[i];
-
+    for (const auto & entry : _entries) {
         auto& row = _legendScrollView.add<PieLegendRow>(
             QTip::Rect{0.0f, 0.0f, 0.0f, kLegendRowHeight},
             entry.block.name,
@@ -340,6 +334,8 @@ void PieView::rebuildData() {
 
         _legendRows.push_back(&row);
     }
+
+    _legendScrollView.add<Spacer>(QTip::Rect{0.0f, 0.0f, 0.0f, kLegendRowHeight});
 
     layout();
 }
@@ -428,8 +424,28 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
 }
 
 bool PieView::handleEvent(const SDL_Event& event) {
-    // Keep wheel/scrollbar input, but legend hover itself has no effect.
-    if (!_legendScrollView.handleEvent(event)) {
+    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        _manualScrolling = true;
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        const QTip::Point mouse{
+            event.button.x,
+            event.button.y
+        };
+
+        if (_legendScrollView.rect().isPointInside(mouse)) {
+            _manualScrolling = true;
+        }
+    }
+
+    const bool propagate = _legendScrollView.handleEvent(event);
+
+    // Remember the position after manual scrolling so the animation
+    // never pulls the legend back to an old target.
+    if (_manualScrolling) {
+        _targetScrollY = _legendScrollView.scrollPosition().y;
+    }
+
+    if (!propagate) {
         return false;
     }
 
@@ -443,8 +459,13 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
     _chart->tick(clock, dt);
 
     const std::size_t hovered = _chart->hoveredIndex();
+
     if (hovered != _chartHoveredIndex) {
         _chartHoveredIndex = hovered;
+
+        // A new chart hover can trigger automatic scrolling again.
+        _manualScrolling = false;
+
         syncHoveredEntry(true);
     }
 
@@ -468,13 +489,16 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
 
     const QTip::Point currentScroll = _legendScrollView.scrollPosition();
     const float scrollDifference = _targetScrollY - currentScroll.y;
-    if (std::abs(scrollDifference) > 0.5f) {
-        const float scrollStep = std::min(1.0f, kScrollAnimationSpeed * safeDt);
+
+    if (!_manualScrolling && std::abs(scrollDifference) > 0.5f) {
+        const float scrollStep =
+            std::min(1.0f, kScrollAnimationSpeed * safeDt);
+
         _legendScrollView.scrollTo({
             0.0f,
             currentScroll.y + scrollDifference * scrollStep
         });
-    } else if (std::abs(scrollDifference) > 0.0f) {
+    } else if (!_manualScrolling && std::abs(scrollDifference) > 0.0f) {
         _legendScrollView.scrollTo({0.0f, _targetScrollY});
     }
 

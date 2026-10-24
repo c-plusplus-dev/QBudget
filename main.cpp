@@ -10,6 +10,7 @@
 
 #include "Storage/Database.h"
 #include "UI/BlocksView.h"
+#include "UI/PieView.h"
 
 using namespace QTip;
 
@@ -41,6 +42,16 @@ void blocksViewRenderer(Window& buttonWindow, const Rect& rect) {
         );
         tl.y += blockHeight + spacing;
     }
+}
+
+void pieViewRenderer(Window& buttonWindow, const Rect& rect) {
+    constexpr float pi = 3.14159265358979323846f;
+
+    const float size = std::min(rect.size.x, rect.size.y);
+    const float radius = (size - 8.0f) / 2.0f;
+    const Point center = rect.center();
+
+    Detail::drawPieSlice(buttonWindow, nullptr, center.x, center.y, radius, 0.75, Color::white, 0);
 }
 }
 
@@ -89,6 +100,18 @@ int main() {
         },
         navigationStyle,
         blocksViewRenderer
+    );
+
+    navigation.addView<PieView, MagickButton>(
+        [&]() -> std::unique_ptr<PieView> {
+            return std::make_unique<PieView>(
+                Rect{0, 0, width, height},
+                database,
+                font
+            );
+        },
+        navigationStyle,
+        pieViewRenderer
     );
 
     auto& blocksView = dynamic_cast<BlocksView&>(*navigation.selectedView());

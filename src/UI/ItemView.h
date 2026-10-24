@@ -7,6 +7,7 @@
 #define QBUDGET_ITEMVIEW_H
 
 #include <functional>
+#include <memory>
 
 #include <QTipUIKit/UIKit.h>
 

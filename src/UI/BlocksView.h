@@ -47,6 +47,7 @@ protected:
 
 private:
     void createBlockViews();
+    void addBlock();
     void updateLayout();
     void resizeBlock(BlockView& block);
     void handleExpansion(BlockView& block);
@@ -57,6 +58,8 @@ private:
     Database& _database;
     std::vector<BlockView*>& _blocks;
     std::vector<BlockView*>& _blocksToDelete;
+    int _currentMonth;
+    int _currentYear;
     float _availableHeight = 0.0f;
 
     ScrollView _scrollView;
@@ -64,7 +67,6 @@ private:
 
     MagickButton _addButton;
 
-    Label _totalLabel;
 };
 
 #endif // QBUDGET_UI_BLOCKSVIEW_H

@@ -7,6 +7,7 @@
 #include "IO/Reader.h"
 #include "IO/Writer.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -64,13 +65,17 @@ void Database::clear() noexcept {
     _blocks.clear();
 }
 
-void Database::remove(std::unique_ptr<Block>& block) {
-    auto it = std::ranges::find_if(_blocks, [&block](const std::unique_ptr<Block>& candidate) {
-        return candidate == block;
-    });
-    if (it == _blocks.end())
-       return;
-    _blocks.erase(it);
+void Database::remove(Block& block) {
+    const auto it = std::ranges::find_if(
+        _blocks,
+        [&block](const std::unique_ptr<Block>& candidate) {
+            return candidate.get() == &block;
+        }
+    );
+
+    if (it != _blocks.end()) {
+        _blocks.erase(it);
+    }
 }
 
 bool Database::empty() const noexcept {

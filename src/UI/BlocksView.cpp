@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cinttypes>
 #include <ranges>
+#include <string>
+#include <utility>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
 
@@ -67,7 +69,9 @@ BlocksView::BlocksView(
       _database(database),
       _blocks(blocks),
       _blocksToDelete(blocksToDelete),
-      _availableHeight(_rect.size.y),
+      _currentMonth(currentMonth),
+      _currentYear(currentYear),
+      _availableHeight(rect.size.y),
       _scrollView(
           {
               0,
@@ -81,17 +85,6 @@ BlocksView::BlocksView(
           Rect{0, 0, kAddBlockButtonSize, kAddBlockButtonSize},
           makeAddButtonStyle(font),
           drawAddIcon
-      ),
-      _totalLabel(
-          fmt(
-              "Total: %" PRId64 "kr | Date: %d-%02d",
-              database.total(),
-              currentYear,
-              currentMonth
-          ),
-          Color::white,
-          Point{10, _rect.size.y - 26.0f},
-          _font
       ) {
     _rect = rect;
     _preferredRect = rect;
@@ -103,6 +96,7 @@ BlocksView::BlocksView(
 
     _scrollView.parent = this;
     _addButton.parent = this;
+    _addButton.setOnClick([this] { addBlock(); });
 
     createBlockViews();
     updateLayout();
@@ -114,7 +108,7 @@ void BlocksView::createBlockViews() {
     for (auto& block : _database.blocks()) {
         auto& blockView = _blockList->add<BlockView>(
             Rect{0, 0, nonNegative(_rect.size.x), kBlockHeight},
-            block,
+            *block,
             _font,
             [this](BlockView& view) {
                 handleExpansion(view);
@@ -130,6 +124,27 @@ void BlocksView::createBlockViews() {
     _blockList->add<Spacer>(
         Rect{0, 0, nonNegative(_rect.size.x), kBottomSpacerHeight}
     );
+}
+
+void BlocksView::addBlock() {
+    Block block{};
+    block.name = "New block";
+
+    auto& model = _database.addBlock(std::move(block));
+    auto& blockView = _blockList->add<BlockView>(
+        Rect{0, 0, nonNegative(_rect.size.x), kBlockHeight},
+        *model,
+        _font,
+        [this](BlockView& view) {
+            handleExpansion(view);
+        },
+        [this](BlockView& view) {
+            showDeleteConfirmation(view);
+        }
+    );
+
+    _blocks.push_back(&blockView);
+    updateLayout();
 }
 
 void BlocksView::handleExpansion(BlockView& block) {
@@ -214,9 +229,11 @@ void BlocksView::processDeletions() {
             continue;
         }
 
-        auto& b = const_cast<Block&>(block->block());
+        Block& model = block->block();
+
+        // Destroy the view before removing the model it references.
         _blockList->remove(*block);
-        _database.remove(b);
+        _database.remove(model);
         _blocks.erase(it);
         changed = true;
     }
@@ -242,7 +259,6 @@ void BlocksView::updateLayout() {
 
     _addButton.reposition({_rect.origin.x + _rect.size.x - kAddBlockButtonSize, 0});
 
-    _totalLabel.reposition({_rect.origin.x + 5.0f, _rect.origin.y + _rect.size.y - 22});
 }
 
 void BlocksView::resize(const Point size) {
@@ -256,6 +272,7 @@ void BlocksView::reposition(const Point position) {
 void BlocksView::setRect(const Rect rect) {
     _rect = rect;
     _preferredRect = rect;
+    _availableHeight = rect.size.y;
 
     const float contentWidth = nonNegative(rect.size.x - kAddBlockButtonSize - 5.0f);
     const float contentHeight = nonNegative(rect.size.y - kVerticalInset);
@@ -325,5 +342,17 @@ void BlocksView::renderImpl(Window& window) {
     window->setRenderColor({20, 20, 20});
     window->renderRect({0, startY + 60, _scrollView.rect().size.x, 10});
 
-    _totalLabel.render(window);
+    const std::string totalText = fmt(
+        "Total: %" PRId64 "kr | Date: %d-%02d",
+        _database.total(),
+        _currentYear,
+        _currentMonth
+    );
+    window->renderText(
+        _font,
+        totalText.c_str(),
+        _rect.origin.x + 5.0f,
+        _rect.origin.y + _rect.size.y - 22.0f,
+        Color::white
+    );
 }

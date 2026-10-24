@@ -55,6 +55,7 @@ private:
     std::size_t _chartHoveredIndex = kNoEntry;
     std::size_t _expandedIndex = kNoEntry;
     float _targetScrollY = 0.0f;
+    bool _manualScrolling = false;
 
     void refreshDataIfNeeded();
     void rebuildData();

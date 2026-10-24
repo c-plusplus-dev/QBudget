@@ -6,9 +6,7 @@
 #define QBUDGET_ITEMVIEW_H
 #include <QTipUIKit/UIObject.h>
 
-
 class ItemView : public UIObject {
 };
-
 
 #endif //QBUDGET_ITEMVIEW_H

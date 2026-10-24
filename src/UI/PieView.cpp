@@ -443,7 +443,7 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
         return;
     }
 
-    const auto* row = static_cast<const PieLegendRow*>(_legendRows[index]);
+    auto* row = static_cast<PieLegendRow*>(_legendRows[index]);
     const float rowTop = row->rect().origin.y;
     const float rowBottom = rowTop + row->rect().size.y;
     const float viewportTop = _legendScrollView.scrollPosition().y;

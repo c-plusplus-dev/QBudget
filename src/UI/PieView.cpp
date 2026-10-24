@@ -264,11 +264,22 @@ void PieView::refreshDataIfNeeded() {
     }
 
     for (std::size_t i = 0; i < currentBlocks.size(); ++i) {
-        if (currentBlocks[i].name != _entries[i].block.name ||
-            currentBlocks[i].total() != _entries[i].value ||
-            currentBlocks[i].items.size() != _entries[i].block.items.size()) {
+        const Block& current = currentBlocks[i];
+        const Entry& previous = _entries[i];
+
+        if (current.name != previous.block.name ||
+            current.total() != previous.value ||
+            current.items.size() != previous.block.items.size()) {
             rebuildData();
             return;
+        }
+
+        for (std::size_t itemIndex = 0; itemIndex < current.items.size(); ++itemIndex) {
+            if (current.items[itemIndex].name != previous.block.items[itemIndex].name ||
+                current.items[itemIndex].cost != previous.block.items[itemIndex].cost) {
+                rebuildData();
+                return;
+            }
         }
     }
 }

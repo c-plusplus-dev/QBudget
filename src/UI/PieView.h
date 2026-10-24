@@ -15,12 +15,7 @@
 
 class PieView final : public View {
 public:
-    PieView(
-        QTip::Rect rect,
-        Database& database,
-        QTip::Font& font
-    );
-
+    PieView(QTip::Rect rect, Database& database, QTip::Font& font);
     ~PieView() override = default;
 
     void refresh();
@@ -34,7 +29,6 @@ public:
     void resize(QTip::Point size) override;
     void reposition(QTip::Point position) override;
     void setRect(QTip::Rect rect) override;
-
     [[nodiscard]] const QTip::Rect& rect() override;
 
 protected:
@@ -52,21 +46,19 @@ private:
 
     Database& _database;
     QTip::Font& _font;
-
     ScrollView _legendScrollView;
     std::unique_ptr<PieChart<Block>> _chart;
-
     std::vector<Entry> _entries;
     std::vector<UIObject*> _legendRows;
+    std::vector<float> _rowExpandProgress;
 
     std::size_t _chartHoveredIndex = kNoEntry;
-    std::size_t _legendHoveredIndex = kNoEntry;
     std::size_t _expandedIndex = kNoEntry;
+    float _targetScrollY = 0.0f;
 
     void refreshDataIfNeeded();
     void rebuildData();
     void layout();
-    void onLegendHover(std::size_t index, bool hovered);
     void syncHoveredEntry(bool scrollToEntry);
     void scrollEntryIntoView(std::size_t index);
 };

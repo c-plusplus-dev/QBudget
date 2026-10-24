@@ -14,12 +14,13 @@ class Database {
 public:
     Database() = default;
 
-    [[nodiscard]] std::vector<Block>& blocks() noexcept;
-    [[nodiscard]] const std::vector<Block>& blocks() const noexcept;
+    [[nodiscard]] std::vector<std::unique_ptr<Block>>& blocks() noexcept;
+    [[nodiscard]] const std::vector<std::unique_ptr<Block>>& blocks() const noexcept;
 
-    [[nodiscard]] Block& addBlock(Block block);
+    [[nodiscard]] std::unique_ptr<Block>& addBlock(Block block);
 
     void clear() noexcept;
+    void remove(std::unique_ptr<Block>& block);
 
     [[nodiscard]] bool empty() const noexcept;
     [[nodiscard]] std::size_t size() const noexcept;
@@ -33,7 +34,7 @@ public:
     );
 
 private:
-    std::vector<Block> _blocks;
+    std::vector<std::unique_ptr<Block>> _blocks;
 };
 
 #endif // QBUDGET_DATABASE_H

@@ -1,3 +1,4 @@
+
 //
 // Created by Ayaan on 2026-10-15.
 //
@@ -5,17 +6,28 @@
 #ifndef QBUDGET_BLOCKVIEW_H
 #define QBUDGET_BLOCKVIEW_H
 
+#include <memory>
+#include <vector>
+
 #include <QTipUIKit/UIKit.h>
+#include <QTipUIKit/Containers/ScrollView.h>
 
 #include "Storage/Block.h"
+#include "UI/ItemView.h"
 
 class BlockView : public UIObject {
 public:
     using OnExpandRequested = std::function<void(BlockView&)>;
     using OnDeleteRequested = std::function<void(BlockView&)>;
 
-    // requires the block to stay alive for the lifetime of BlockView
-    explicit BlockView(QTip::Rect rect, Block& block, QTip::Font& font, OnExpandRequested expandRequested, OnDeleteRequested deleteRequested);
+    // Requires the block to stay alive for the lifetime of BlockView.
+    explicit BlockView(
+        QTip::Rect rect,
+        Block& block,
+        QTip::Font& font,
+        OnExpandRequested expandRequested,
+        OnDeleteRequested deleteRequested
+    );
 
     ~BlockView() override = default;
 
@@ -37,12 +49,17 @@ protected:
     void renderImpl(QTip::Window& window) override;
 
 private:
-    void onResize() const;
+    void onResize();
+    void syncItemViews();
+    void layoutItemViews() const;
 
-    Block* _block = nullptr;
+    Block& _block;
 
     std::unique_ptr<Button> _delete;
     std::unique_ptr<Button> _expand;
+
+    std::vector<ItemView*> _itemViews;
+    std::unique_ptr<ScrollView> _itemScrollView;
 
     OnExpandRequested _expandRequested;
     OnDeleteRequested _deleteRequested;
@@ -50,4 +67,4 @@ private:
     QTip::Font& _font;
 };
 
-#endif //QBUDGET_BLOCKVIEW_H
+#endif // QBUDGET_BLOCKVIEW_H

@@ -154,14 +154,14 @@ private:
     float _expandProgress = 0.0f;
 };
 
-std::vector<Block> eligibleBlocks(const Database& database) {
-    std::vector<Block> blocks;
+std::vector<std::unique_ptr<Block>> eligibleBlocks(const Database& database) {
+    std::vector<std::unique_ptr<Block>> blocks;
     blocks.reserve(database.blocks().size());
 
-    for (const Block& block : database.blocks()) {
-        const std::int64_t value = block.total();
+    for (auto& block : database.blocks()) {
+        const std::int64_t value = block->total();
 
-        if (block.name.empty() || value <= 0) {
+        if (block->name.empty() || value <= 0) {
             continue;
         }
 

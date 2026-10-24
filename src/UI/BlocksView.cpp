@@ -214,7 +214,9 @@ void BlocksView::processDeletions() {
             continue;
         }
 
+        auto& b = const_cast<Block&>(block->block());
         _blockList->remove(*block);
+        _database.remove(b);
         _blocks.erase(it);
         changed = true;
     }

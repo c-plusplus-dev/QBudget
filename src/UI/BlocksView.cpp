@@ -67,7 +67,7 @@ BlocksView::BlocksView(
       _database(database),
       _blocks(blocks),
       _blocksToDelete(blocksToDelete),
-      _availableHeight(_rect.size.y),
+      _availableHeight(rect.size.y),
       _scrollView(
           {
               0,
@@ -114,7 +114,7 @@ void BlocksView::createBlockViews() {
     for (auto& block : _database.blocks()) {
         auto& blockView = _blockList->add<BlockView>(
             Rect{0, 0, nonNegative(_rect.size.x), kBlockHeight},
-            block,
+            *block,
             _font,
             [this](BlockView& view) {
                 handleExpansion(view);
@@ -214,9 +214,11 @@ void BlocksView::processDeletions() {
             continue;
         }
 
-        auto& b = const_cast<Block&>(block->block());
+        Block& model = block->block();
+
+        // Destroy the view before removing the model it references.
         _blockList->remove(*block);
-        _database.remove(b);
+        _database.remove(model);
         _blocks.erase(it);
         changed = true;
     }
@@ -256,6 +258,7 @@ void BlocksView::reposition(const Point position) {
 void BlocksView::setRect(const Rect rect) {
     _rect = rect;
     _preferredRect = rect;
+    _availableHeight = rect.size.y;
 
     const float contentWidth = nonNegative(rect.size.x - kAddBlockButtonSize - 5.0f);
     const float contentHeight = nonNegative(rect.size.y - kVerticalInset);

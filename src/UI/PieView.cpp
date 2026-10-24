@@ -154,8 +154,8 @@ private:
     float _expandProgress = 0.0f;
 };
 
-std::vector<std::unique_ptr<Block>> eligibleBlocks(const Database& database) {
-    std::vector<std::unique_ptr<Block>> blocks;
+std::vector<Block> eligibleBlocks(const Database& database) {
+    std::vector<Block> blocks;
     blocks.reserve(database.blocks().size());
 
     for (auto& block : database.blocks()) {
@@ -165,7 +165,7 @@ std::vector<std::unique_ptr<Block>> eligibleBlocks(const Database& database) {
             continue;
         }
 
-        blocks.push_back(block);
+        blocks.push_back(*block);
     }
 
     std::stable_sort(
@@ -265,7 +265,8 @@ void PieView::refreshDataIfNeeded() {
 
     for (std::size_t i = 0; i < currentBlocks.size(); ++i) {
         if (currentBlocks[i].name != _entries[i].block.name ||
-            currentBlocks[i].total() != _entries[i].value) {
+            currentBlocks[i].total() != _entries[i].value ||
+            currentBlocks[i].items.size() != _entries[i].block.items.size()) {
             rebuildData();
             return;
         }

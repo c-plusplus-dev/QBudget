@@ -1,6 +1,8 @@
 #include "UI/PieView.h"
 
 #include <algorithm>
+#include <cmath>
+#include <cstdint>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -18,12 +20,12 @@ constexpr float kPadding = 10.0f;
 constexpr float kGap = 15.0f;
 constexpr float kLegendRowHeight = 58.0f;
 constexpr float kExpandedLegendRowHeight = 86.0f;
-constexpr float kLegendScrollMargin = 8.0f;
+constexpr float kLegendScrollMargin = 12.0f;
+constexpr float kHoverAnimationSpeed = 8.0f;
+constexpr float kScrollAnimationSpeed = 10.0f;
 
 class PieLegendRow final : public UIObject {
 public:
-    using HoverCallback = std::function<void(bool)>;
-
     PieLegendRow(
         QTip::Rect rect,
         std::string name,
@@ -31,52 +33,30 @@ public:
         double percent,
         QTip::Color color,
         std::size_t itemCount,
-        QTip::Font& font,
-        HoverCallback hoverCallback
+        QTip::Font& font
     )
         : _name(std::move(name)),
           _value(value),
           _percent(percent),
           _color(color),
           _itemCount(itemCount),
-          _font(font),
-          _hoverCallback(std::move(hoverCallback)) {
+          _font(font) {
         _rect = rect;
         _preferredRect = rect;
     }
 
-    bool handleEvent(const SDL_Event& event) override {
-        if (event.type != SDL_EVENT_MOUSE_MOTION) {
-            return true;
-        }
-
-        const bool nowHovered = _rect.isPointInside({
-            event.motion.x,
-            event.motion.y
-        });
-
-        if (nowHovered != _hovered) {
-            _hovered = nowHovered;
-            if (_hoverCallback) {
-                _hoverCallback(_hovered);
-            }
-        }
-
+    bool handleEvent(const SDL_Event&) override {
+        // Legend rows are display-only. Hover interactions are driven exclusively
+        // by PieChart::hoveredIndex().
         return true;
     }
 
-    void setExpanded(bool expanded) {
-        _expanded = expanded;
-        const float height = _expanded
-            ? kExpandedLegendRowHeight
-            : kLegendRowHeight;
-
+    void setExpandProgress(float progress) {
+        _expandProgress = std::clamp(progress, 0.0f, 1.0f);
+        const float height = kLegendRowHeight
+            + (kExpandedLegendRowHeight - kLegendRowHeight) * _expandProgress;
         _rect.size.y = height;
         _preferredRect.size.y = height;
-    }
-
-    [[nodiscard]] bool hovered() const {
-        return _hovered;
     }
 
     [[nodiscard]] QTip::Point minimumSize() const override {
@@ -109,10 +89,11 @@ public:
 protected:
     void renderImpl(QTip::Window& window) override {
         constexpr float normalSwatchSize = 24.0f;
-        const float swatchSize = _expanded ? 30.0f : normalSwatchSize;
+        const float swatchSize = normalSwatchSize + 6.0f * _expandProgress;
 
-        if (_hovered || _expanded) {
-            window->setRenderColor(QTip::Color{45, 45, 45});
+        if (_expandProgress > 0.001f) {
+            const auto alpha = static_cast<std::uint8_t>(45.0f * _expandProgress);
+            window->setRenderColor(QTip::Color{45, 45, 45, alpha});
             window->renderRoundedRect(_rect, 6);
         }
 
@@ -153,16 +134,16 @@ protected:
             QTip::Color{180, 180, 180}
         );
 
-        if (_expanded) {
-            const std::string itemText =
-                "Items: " + std::to_string(_itemCount);
-
+        if (_expandProgress > 0.35f) {
+            const float fade = std::clamp((_expandProgress - 0.35f) / 0.65f, 0.0f, 1.0f);
+            const auto alpha = static_cast<std::uint8_t>(205.0f * fade);
+            const std::string itemText = "Items: " + std::to_string(_itemCount);
             window->renderText(
                 _font,
                 itemText.c_str(),
                 textX,
                 _rect.origin.y + 57.0f,
-                QTip::Color{205, 205, 205}
+                QTip::Color{205, 205, 205, alpha}
             );
         }
     }
@@ -174,9 +155,7 @@ private:
     QTip::Color _color;
     std::size_t _itemCount = 0;
     QTip::Font& _font;
-    HoverCallback _hoverCallback;
-    bool _hovered = false;
-    bool _expanded = false;
+    float _expandProgress = 0.0f;
 };
 
 std::vector<Block> eligibleBlocks(const Database& database) {
@@ -343,8 +322,8 @@ void PieView::rebuildData() {
     _legendScrollView.clear();
     _legendRows.clear();
     _chartHoveredIndex = kNoEntry;
-    _legendHoveredIndex = kNoEntry;
     _expandedIndex = kNoEntry;
+    _rowExpandProgress.assign(_entries.size(), 0.0f);
 
     for (std::size_t i = 0; i < _entries.size(); ++i) {
         const Entry& entry = _entries[i];
@@ -356,10 +335,7 @@ void PieView::rebuildData() {
             entry.percent,
             entry.color,
             entry.block.items.size(),
-            _font,
-            [this, i](bool hovered) {
-                onLegendHover(i, hovered);
-            }
+            _font
         );
 
         _legendRows.push_back(&row);
@@ -387,12 +363,14 @@ void PieView::layout() {
     float rowY = 0.0f;
     for (std::size_t i = 0; i < _legendRows.size(); ++i) {
         auto* row = static_cast<PieLegendRow*>(_legendRows[i]);
-        const float rowHeight = i == _expandedIndex
-            ? kExpandedLegendRowHeight
-            : kLegendRowHeight;
+        const float progress = i < _rowExpandProgress.size()
+            ? _rowExpandProgress[i]
+            : 0.0f;
+        const float rowHeight = kLegendRowHeight
+            + (kExpandedLegendRowHeight - kLegendRowHeight) * progress;
 
         row->setRect({0.0f, rowY, columnWidth, rowHeight});
-        row->setExpanded(i == _expandedIndex);
+        row->setExpandProgress(progress);
         rowY += rowHeight;
     }
 
@@ -410,30 +388,14 @@ void PieView::layout() {
     });
 }
 
-void PieView::onLegendHover(const std::size_t index, const bool hovered) {
-    if (hovered) {
-        _legendHoveredIndex = index;
-    } else if (_legendHoveredIndex == index) {
-        _legendHoveredIndex = kNoEntry;
-    }
-
-    syncHoveredEntry(true);
-}
-
 void PieView::syncHoveredEntry(const bool scrollToEntry) {
-    const std::size_t activeIndex =
-        _legendHoveredIndex != kNoEntry
-            ? _legendHoveredIndex
-            : _chartHoveredIndex;
-
-    if (activeIndex == _expandedIndex) {
+    // Only the pie chart's hovered slice controls the selected legend row.
+    if (_chartHoveredIndex == _expandedIndex) {
         return;
     }
 
-    _expandedIndex = activeIndex;
-    layout();
-
-    if (scrollToEntry && _expandedIndex != kNoEntry) {
+    _expandedIndex = _chartHoveredIndex;
+    if (_expandedIndex != kNoEntry && scrollToEntry) {
         scrollEntryIntoView(_expandedIndex);
     }
 }
@@ -458,44 +420,15 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
         targetY = rowBottom - _legendScrollView.rect().size.y
             + kLegendScrollMargin;
     } else {
+        _targetScrollY = viewportTop;
         return;
     }
 
-    _legendScrollView.scrollTo({0.0f, std::max(0.0f, targetY)});
+    _targetScrollY = std::max(0.0f, targetY);
 }
 
 bool PieView::handleEvent(const SDL_Event& event) {
-    // ScrollView does not forward mouse motion that occurs outside its viewport,
-    // so update the legend hover state here as well to clear it on mouse exit.
-    if (event.type == SDL_EVENT_MOUSE_MOTION) {
-        const QTip::Point mouse{
-            event.motion.x,
-            event.motion.y
-        };
-
-        std::size_t hoveredIndex = kNoEntry;
-        if (_legendScrollView.rect().isPointInside(mouse)) {
-            const QTip::Point contentMouse{
-                mouse.x - _legendScrollView.rect().origin.x
-                    + _legendScrollView.scrollPosition().x,
-                mouse.y - _legendScrollView.rect().origin.y
-                    + _legendScrollView.scrollPosition().y
-            };
-
-            for (std::size_t i = 0; i < _legendRows.size(); ++i) {
-                if (_legendRows[i]->rect().isPointInside(contentMouse)) {
-                    hoveredIndex = i;
-                    break;
-                }
-            }
-        }
-
-        if (hoveredIndex != _legendHoveredIndex) {
-            _legendHoveredIndex = hoveredIndex;
-            syncHoveredEntry(true);
-        }
-    }
-
+    // Keep wheel/scrollbar input, but legend hover itself has no effect.
     if (!_legendScrollView.handleEvent(event)) {
         return false;
     }
@@ -513,6 +446,40 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
     if (hovered != _chartHoveredIndex) {
         _chartHoveredIndex = hovered;
         syncHoveredEntry(true);
+    }
+
+    const float safeDt = static_cast<float>(std::clamp(dt, 0.0, 0.05));
+    const float hoverStep = std::min(1.0f, kHoverAnimationSpeed * safeDt);
+    bool rowAnimationChanged = false;
+
+    for (std::size_t i = 0; i < _rowExpandProgress.size(); ++i) {
+        const float target = i == _expandedIndex ? 1.0f : 0.0f;
+        float& progress = _rowExpandProgress[i];
+        const float next = progress + (target - progress) * hoverStep;
+        if (std::abs(target - next) < 0.002f) {
+            progress = target;
+        } else {
+            progress = next;
+        }
+        if (std::abs(progress - target) > 0.002f) {
+            rowAnimationChanged = true;
+        }
+    }
+
+    const QTip::Point currentScroll = _legendScrollView.scrollPosition();
+    const float scrollDifference = _targetScrollY - currentScroll.y;
+    if (std::abs(scrollDifference) > 0.5f) {
+        const float scrollStep = std::min(1.0f, kScrollAnimationSpeed * safeDt);
+        _legendScrollView.scrollTo({
+            0.0f,
+            currentScroll.y + scrollDifference * scrollStep
+        });
+    } else if (std::abs(scrollDifference) > 0.0f) {
+        _legendScrollView.scrollTo({0.0f, _targetScrollY});
+    }
+
+    if (rowAnimationChanged) {
+        layout();
     }
 }
 

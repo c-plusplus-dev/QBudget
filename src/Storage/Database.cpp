@@ -8,6 +8,7 @@
 #include "IO/Writer.h"
 
 #include <cstdint>
+#include <iostream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -46,21 +47,30 @@ namespace {
 
 }
 
-std::vector<Block>& Database::blocks() noexcept {
+std::vector<std::unique_ptr<Block>>& Database::blocks() noexcept {
     return _blocks;
 }
 
-const std::vector<Block>& Database::blocks() const noexcept {
+const std::vector<std::unique_ptr<Block>>& Database::blocks() const noexcept {
     return _blocks;
 }
 
-Block& Database::addBlock(Block block) {
-    _blocks.push_back(std::move(block));
+std::unique_ptr<Block>& Database::addBlock(Block block) {
+    _blocks.push_back(std::make_unique<Block>(std::move(block)));
     return _blocks.back();
 }
 
 void Database::clear() noexcept {
     _blocks.clear();
+}
+
+void Database::remove(std::unique_ptr<Block>& block) {
+    auto it = std::ranges::find_if(_blocks, [&block](const std::unique_ptr<Block>& candidate) {
+        return candidate == block;
+    });
+    if (it == _blocks.end())
+       return;
+    _blocks.erase(it);
 }
 
 bool Database::empty() const noexcept {
@@ -87,8 +97,8 @@ void Database::save(const std::filesystem::path& path) const {
     writer.write64(static_cast<std::uint64_t>(_blocks.size()));
 
     // File contents.
-    for (const Block& block : _blocks) {
-        block.writeTo(writer);
+    for (auto& block : _blocks) {
+        block->writeTo(writer);
     }
 
     // Writer handles writing through a temporary file.
@@ -98,7 +108,7 @@ void Database::save(const std::filesystem::path& path) const {
 std::int64_t Database::total() const {
     std::int64_t total = 0;
     for (auto& block : _blocks) {
-        total += block.total();
+        total += block->total();
     }
     return total;
 }
@@ -153,7 +163,7 @@ Database Database::load(const std::filesystem::path& path) {
     database._blocks.reserve(static_cast<std::size_t>(blockCount));
 
     for (std::uint64_t i = 0; i < blockCount; ++i) {
-        database._blocks.push_back(Block::readFrom(reader));
+        database._blocks.push_back(std::make_unique<Block>(Block::readFrom(reader)));
     }
 
     // Do not silently accept garbage appended to the database.

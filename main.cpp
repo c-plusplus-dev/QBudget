@@ -45,8 +45,6 @@ void blocksViewRenderer(Window& buttonWindow, const Rect& rect) {
 }
 
 void pieViewRenderer(Window& buttonWindow, const Rect& rect) {
-    constexpr float pi = 3.14159265358979323846f;
-
     const float size = std::min(rect.size.x, rect.size.y);
     const float radius = (size - 8.0f) / 2.0f;
     const Point center = rect.center();

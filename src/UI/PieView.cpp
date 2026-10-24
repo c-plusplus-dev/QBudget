@@ -154,8 +154,8 @@ private:
     float _expandProgress = 0.0f;
 };
 
-std::vector<std::unique_ptr<Block>> eligibleBlocks(const Database& database) {
-    std::vector<std::unique_ptr<Block>> blocks;
+std::vector<Block> eligibleBlocks(const Database& database) {
+    std::vector<Block> blocks;
     blocks.reserve(database.blocks().size());
 
     for (auto& block : database.blocks()) {
@@ -165,7 +165,7 @@ std::vector<std::unique_ptr<Block>> eligibleBlocks(const Database& database) {
             continue;
         }
 
-        blocks.push_back(block);
+        blocks.push_back(*block);
     }
 
     std::stable_sort(
@@ -264,10 +264,22 @@ void PieView::refreshDataIfNeeded() {
     }
 
     for (std::size_t i = 0; i < currentBlocks.size(); ++i) {
-        if (currentBlocks[i].name != _entries[i].block.name ||
-            currentBlocks[i].total() != _entries[i].value) {
+        const Block& current = currentBlocks[i];
+        const Entry& previous = _entries[i];
+
+        if (current.name != previous.block.name ||
+            current.total() != previous.value ||
+            current.items.size() != previous.block.items.size()) {
             rebuildData();
             return;
+        }
+
+        for (std::size_t itemIndex = 0; itemIndex < current.items.size(); ++itemIndex) {
+            if (current.items[itemIndex].name != previous.block.items[itemIndex].name ||
+                current.items[itemIndex].cost != previous.block.items[itemIndex].cost) {
+                rebuildData();
+                return;
+            }
         }
     }
 }

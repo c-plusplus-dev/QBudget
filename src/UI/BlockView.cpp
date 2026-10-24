@@ -86,7 +86,11 @@ BlockView::BlockView(
     onResize();
 }
 
-const Block& BlockView::block() const {
+Block& BlockView::block() noexcept {
+    return _block;
+}
+
+const Block& BlockView::block() const noexcept {
     return _block;
 }
 

@@ -8,6 +8,7 @@
 #include "Block.h"
 
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 class Database {
@@ -20,7 +21,7 @@ public:
     [[nodiscard]] std::unique_ptr<Block>& addBlock(Block block);
 
     void clear() noexcept;
-    void remove(std::unique_ptr<Block>& block);
+    void remove(Block& block);
 
     [[nodiscard]] bool empty() const noexcept;
     [[nodiscard]] std::size_t size() const noexcept;

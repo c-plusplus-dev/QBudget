@@ -6,6 +6,7 @@
 #ifndef QBUDGET_BLOCKVIEW_H
 #define QBUDGET_BLOCKVIEW_H
 
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -31,7 +32,8 @@ public:
 
     ~BlockView() override = default;
 
-    [[nodiscard]] const Block& block() const;
+    [[nodiscard]] Block& block() noexcept;
+    [[nodiscard]] const Block& block() const noexcept;
 
     bool handleEvent(const SDL_Event& event) override;
 

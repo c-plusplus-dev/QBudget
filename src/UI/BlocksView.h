@@ -57,7 +57,7 @@ private:
     Database& _database;
     std::vector<BlockView*>& _blocks;
     std::vector<BlockView*>& _blocksToDelete;
-    float& _availableHeight;
+    float _availableHeight = 0.0f;
 
     ScrollView _scrollView;
     List* _blockList = nullptr;

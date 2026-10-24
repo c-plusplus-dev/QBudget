@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <ranges>
+#include <string>
 #include <utility>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 

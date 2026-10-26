@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <QTipUIKit/Widgets/Button/MagickButton.h>
 
 using namespace QTip;
 
@@ -52,10 +53,16 @@ ItemView::ItemView(
         style
     );
 
-    _editButton = std::make_unique<Button>(
+    _editButton = std::make_unique<MagickButton>(
         Rect{0, 0, kButtonSize, kButtonSize},
-        "Edit",
-        style
+        style,
+        [this] (Window& window, const Rect& rect) {
+            if (_editButtonTexture) {
+                auto origin = rect.origin + Point{2.5, 2.5};
+                auto size = rect.size - Point{5, 5};
+                window->renderTexture(*_editButtonTexture, Rect::zero, {origin, size});
+            }
+        }
     );
 
     _deleteButton->parent = this;
@@ -161,6 +168,13 @@ void ItemView::updateLayout() {
 }
 
 void ItemView::renderImpl(Window& window) {
+    if (!_editButtonTexture) {
+        _editButtonTexture = std::make_unique<Texture>(
+            window.getRenderer(),
+            "assets/edit.png"
+        );
+    }
+
     window->setRenderColor({40, 40, 40});
     window->renderRoundedRect(_rect, 10);
 

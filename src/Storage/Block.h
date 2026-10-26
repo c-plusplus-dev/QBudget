@@ -20,6 +20,8 @@ public:
 
         void writeTo(Writer& writer) const;
         static Item readFrom(Reader& reader);
+
+        Block* parent = nullptr;
     };
 
     std::string name;
@@ -29,6 +31,9 @@ public:
 
     void writeTo(Writer& writer) const;
     static Block readFrom(Reader& reader);
+
+    void remove(Item& item);
+    void remove(std::size_t index);
 };
 
 #endif //QBUDGET_BLOCK_H

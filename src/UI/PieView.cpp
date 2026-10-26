@@ -168,15 +168,14 @@ std::vector<Block> eligibleBlocks(const Database& database) {
         blocks.push_back(*block);
     }
 
-    std::stable_sort(
-        blocks.begin(),
-        blocks.end(),
+    std::ranges::stable_sort(
+        blocks,
         [](const Block& lhs, const Block& rhs) {
             const std::int64_t lhsTotal = lhs.total();
             const std::int64_t rhsTotal = rhs.total();
 
             if (lhsTotal != rhsTotal) {
-                return lhsTotal < rhsTotal;
+               return lhsTotal < rhsTotal;
             }
 
             return lhs.name < rhs.name;

@@ -29,8 +29,6 @@ public:
 
     ~BlocksView() override = default;
 
-    void processDeletions();
-
     void resize(QTip::Point size) override;
     void reposition(QTip::Point position) override;
     void setRect(QTip::Rect rect) override;
@@ -46,6 +44,7 @@ protected:
     void renderImpl(QTip::Window& window) override;
 
 private:
+    void processDeletions();
     void createBlockViews();
     void addBlock();
     void updateLayout();
@@ -53,7 +52,6 @@ private:
     void handleExpansion(BlockView& block);
     void showDeleteConfirmation(BlockView& block) const;
 
-    Window& _window;
     Font& _font;
     Database& _database;
     std::vector<BlockView*>& _blocks;

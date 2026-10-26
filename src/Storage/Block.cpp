@@ -38,7 +38,30 @@ Block Block::readFrom(Reader& reader) {
     Block block{};
     block.name = reader.readString();
     uint64_t length = reader.read64();
-    for (uint64_t i = 0; i < length; i++)
+    for (uint64_t i = 0; i < length; i++) {
         block.items.push_back(std::move(Item::readFrom(reader)));
-    return block;
+        auto& item = block.items.back();
+        item.parent = &block;
+    }
+    return std::move(block);
+}
+
+void Block::remove(Item& item) {
+    auto it = std::ranges::find_if(items, [&item] (const Item& candidate) {
+        return &item == &candidate;
+    });
+
+    if (it == items.end())
+        return;
+
+    items.erase(it);
+}
+
+void Block::remove(std::size_t index) {
+    if (index < items.size()) {
+        items.erase(std::next(
+            items.begin(),
+            static_cast<std::ptrdiff_t>(index)
+        ));
+    }
 }

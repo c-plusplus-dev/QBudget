@@ -112,14 +112,10 @@ int main() {
         pieViewRenderer
     );
 
-    auto& blocksView = dynamic_cast<BlocksView&>(*navigation.selectedView());
-
     Point previousWindowSize{-1, -1};
 
     while (!window.shouldClose()) {
         QTipRuntime::pollEvents();
-
-        blocksView.processDeletions();
 
         const Point currentWindowSize = window.size();
         if (currentWindowSize != previousWindowSize) {

@@ -10,6 +10,7 @@
 #include <memory>
 
 #include <QTipUIKit/UIKit.h>
+#include <QTipUIKit/Widgets/Button/MagickButton.h>
 
 #include "Storage/Block.h"
 
@@ -52,7 +53,8 @@ private:
     QTip::Font& _font;
 
     std::unique_ptr<Button> _deleteButton;
-    std::unique_ptr<Button> _editButton;
+    std::unique_ptr<MagickButton> _editButton;
+    std::unique_ptr<QTip::Texture> _editButtonTexture;
 
     Action _onEdit;
     Action _onDelete;

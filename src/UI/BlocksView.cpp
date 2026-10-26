@@ -64,8 +64,7 @@ BlocksView::BlocksView(
     int currentMonth,
     int currentYear
 )
-    : _window(window),
-      _font(font),
+    : _font(font),
       _database(database),
       _blocks(blocks),
       _blocksToDelete(blocksToDelete),
@@ -168,7 +167,9 @@ void BlocksView::handleExpansion(BlockView& block) {
 }
 
 void BlocksView::showDeleteConfirmation(BlockView& block) const {
-    Dialog& dialog = Dialog::create(_window);
+    if (!_window)
+        return;
+    Dialog& dialog = Dialog::create(*_window);
 
     auto& content = dialog.content();
     auto& buttons = dialog.buttons();
@@ -305,6 +306,7 @@ Point BlocksView::preferredSize() const {
 }
 
 bool BlocksView::handleEvent(const SDL_Event& event) {
+    processDeletions();
     bool status = true;
     if (!_addButton.handleEvent(event)) {
         status = false;

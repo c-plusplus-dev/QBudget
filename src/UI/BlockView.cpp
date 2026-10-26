@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <string>
 #include <utility>
+#include <cinttypes>
 
 using namespace QTip;
 
@@ -104,6 +105,8 @@ bool BlockView::handleEvent(const SDL_Event& event) {
     }
 
     if (expanded) {
+        processDeletions();
+
         syncItemViews();
 
         if (!_itemScrollView->handleEvent(event))
@@ -154,8 +157,12 @@ void BlockView::syncItemViews() {
                 Rect{0, 0, 100, kItemHeight},
                 item,
                 _font,
-                ItemView::Action{},
-                ItemView::Action{}
+                [this] (ItemView& item) {
+                    onEdit(item);
+                },
+                [this] (ItemView& item) {
+                    onDelete(item);
+                }
             );
 
             _itemViews.push_back(&itemView);
@@ -202,6 +209,155 @@ void BlockView::layoutItemViews() const {
     _itemScrollView->setContentSize({right - left, itemsHeight});
 }
 
+void BlockView::onEdit(ItemView& item) {
+    if (!_window)
+        return;
+    Dialog& dialog = Dialog::create(*_window);
+
+    auto& content = dialog.content();
+    auto& buttons = dialog.buttons();
+
+    content.add<Label>(
+        "Are you sure?",
+        Color::white,
+        Point{0, 0},
+        _font
+    );
+
+    content.add<Label>(
+        fmt("You're about to delete an item called: \"%s\"", item.item().name.c_str()),
+        Color::white,
+        Point{0, 32},
+        _font
+    );
+
+    content.add<Label>(
+        fmt("The item is worth: %" PRId32 "kr", item.item().cost),
+        Color::white,
+        Point{0, 52},
+        _font
+    );
+
+    ButtonStyle style;
+    style.color = {50, 50, 50};
+    style.hoverColor = {70, 70, 70};
+    style.pressedColor = {30, 30, 30};
+    style.font = _font;
+    style.fontColor = Color::white;
+
+    auto& cancelButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Cancel",
+        style
+    );
+    cancelButton.setOnClick([&dialog] {
+        dialog.close();
+    });
+
+    style.color = {255, 0, 0};
+    style.hoverColor = {255, 64, 64};
+    style.pressedColor = {255, 128, 128};
+
+    auto& deleteButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Delete",
+        style
+    );
+    deleteButton.setOnClick([this, &item, &dialog] {
+        if (std::ranges::find(_itemsToDelete, &item) == _itemsToDelete.end()) {
+            _itemsToDelete.push_back(&item);
+        }
+        dialog.close();
+    });
+}
+
+void BlockView::onDelete(ItemView& item) {
+    if (!_window)
+        return;
+    Dialog& dialog = Dialog::create(*_window);
+
+    auto& content = dialog.content();
+    auto& buttons = dialog.buttons();
+
+    content.add<Label>(
+        "Are you sure?",
+        Color::white,
+        Point{0, 0},
+        _font
+    );
+
+    content.add<Label>(
+        fmt("You're about to delete an item called: \"%s\"", item.item().name.c_str()),
+        Color::white,
+        Point{0, 32},
+        _font
+    );
+
+    content.add<Label>(
+        fmt("The item is worth: %" PRId32 "kr", item.item().cost),
+        Color::white,
+        Point{0, 52},
+        _font
+    );
+
+    ButtonStyle style;
+    style.color = {50, 50, 50};
+    style.hoverColor = {70, 70, 70};
+    style.pressedColor = {30, 30, 30};
+    style.font = _font;
+    style.fontColor = Color::white;
+
+    auto& cancelButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Cancel",
+        style
+    );
+    cancelButton.setOnClick([&dialog] {
+        dialog.close();
+    });
+
+    style.color = {255, 0, 0};
+    style.hoverColor = {255, 64, 64};
+    style.pressedColor = {255, 128, 128};
+
+    auto& deleteButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Delete",
+        style
+    );
+    deleteButton.setOnClick([this, &item, &dialog] {
+        if (std::ranges::find(_itemsToDelete, &item) == _itemsToDelete.end()) {
+            _itemsToDelete.push_back(&item);
+        }
+        dialog.close();
+    });
+}
+
+void BlockView::processDeletions() {
+    bool changed = false;
+
+    for (auto item : _itemsToDelete) {
+        const auto it = std::ranges::find(_itemViews, item);
+        if (it == _itemViews.end()) {
+            continue;
+        }
+
+        Block::Item& model = item->item();
+
+        // Destroy the view before removing the model it references.
+        _itemScrollView->remove(*item);
+        _block.remove(model);
+        _itemViews.erase(it);
+        changed = true;
+    }
+
+    _itemsToDelete.clear();
+
+    if (changed) {
+        syncItemViews();
+    }
+}
+
 void BlockView::onResize() {
     _expand->reposition({
         _rect.origin.x + _rect.size.x - 35.0f,
@@ -219,7 +375,7 @@ void BlockView::onResize() {
 
     _itemScrollView->setRect({
         {left, top},
-        {width, _rect.size.y - kItemTop - kItemMargin}
+        {width, _rect.size.y - kItemTop - kItemMargin - 10.0f}
     });
 
     layoutItemViews();

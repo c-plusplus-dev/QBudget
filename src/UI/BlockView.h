@@ -55,6 +55,11 @@ private:
     void syncItemViews();
     void layoutItemViews() const;
 
+    void onEdit(ItemView& item);
+    void onDelete(ItemView& item);
+
+    void processDeletions();
+
     Block& _block;
 
     std::unique_ptr<Button> _delete;
@@ -62,6 +67,8 @@ private:
 
     std::vector<ItemView*> _itemViews;
     std::unique_ptr<ScrollView> _itemScrollView;
+
+    std::vector<ItemView*> _itemsToDelete;
 
     OnExpandRequested _expandRequested;
     OnDeleteRequested _deleteRequested;

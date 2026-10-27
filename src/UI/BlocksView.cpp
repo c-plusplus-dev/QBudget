@@ -177,7 +177,8 @@ void BlocksView::addBlock() {
 
     Dialog& dialog = Dialog::create(*_window);
 
-    auto& content = dialog.content();
+    auto& c = dialog.content();
+    auto& content = c.add<List>(Rect{0, 0, c.rect().size});
     auto& buttons = dialog.buttons();
 
     content.add<Label>(
@@ -186,6 +187,8 @@ void BlocksView::addBlock() {
         Point{0, 0},
         _font
     );
+
+    content.add<Spacer>(Rect{0, 0, 10, 20});
 
     content.add<Label>(
         "Name:",

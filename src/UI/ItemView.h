@@ -54,7 +54,9 @@ private:
 
     std::unique_ptr<Button> _deleteButton;
     std::unique_ptr<MagickButton> _editButton;
+
     std::unique_ptr<QTip::Texture> _editButtonTexture;
+    std::unique_ptr<QTip::Texture> _moveTexture;
 
     Action _onEdit;
     Action _onDelete;

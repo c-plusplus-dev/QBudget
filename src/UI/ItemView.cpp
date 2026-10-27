@@ -170,8 +170,14 @@ void ItemView::updateLayout() {
 void ItemView::renderImpl(Window& window) {
     if (!_editButtonTexture) {
         _editButtonTexture = std::make_unique<Texture>(
-            window.getRenderer(),
+            window,
             "assets/edit.png"
+        );
+    }
+    if (!_moveTexture) {
+        _moveTexture = std::make_unique<Texture>(
+            window,
+            "assets/drag2.png"
         );
     }
 
@@ -198,4 +204,9 @@ void ItemView::renderImpl(Window& window) {
 
     _deleteButton->render(window);
     _editButton->render(window);
+
+    auto size = 24.0f;
+    auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
+    auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
+    window->renderTexture(*_moveTexture, Rect::zero, {x, y, size, size});
 }

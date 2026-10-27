@@ -18,16 +18,16 @@
 
 class BlockView : public UIObject {
 public:
-    using OnExpandRequested = std::function<void(BlockView&)>;
-    using OnDeleteRequested = std::function<void(BlockView&)>;
+    using Action = std::function<void(BlockView&)>;
 
     // Requires the block to stay alive for the lifetime of BlockView.
     explicit BlockView(
         QTip::Rect rect,
         Block& block,
         QTip::Font& font,
-        OnExpandRequested expandRequested,
-        OnDeleteRequested deleteRequested
+        Action expandRequested,
+        Action deleteRequested,
+        Action addRequested
     );
 
     ~BlockView() override = default;
@@ -55,8 +55,11 @@ private:
     void syncItemViews();
     void layoutItemViews() const;
 
-    void onEdit(ItemView& item);
-    void onDelete(ItemView& item);
+    void onEdit(ItemView& itemView);
+    void onDelete(ItemView& itemView);
+    void onAddItem();
+
+    ItemView& addItem(Block::Item& item);
 
     void processDeletions();
 
@@ -64,14 +67,18 @@ private:
 
     std::unique_ptr<Button> _delete;
     std::unique_ptr<Button> _expand;
+    std::unique_ptr<Button> _add;
+
+    std::unique_ptr<QTip::Texture> _moveTexture;
 
     std::vector<ItemView*> _itemViews;
     std::unique_ptr<ScrollView> _itemScrollView;
 
     std::vector<ItemView*> _itemsToDelete;
 
-    OnExpandRequested _expandRequested;
-    OnDeleteRequested _deleteRequested;
+    Action _expandRequested;
+    Action _deleteRequested;
+    Action _addRequested;
 
     QTip::Font& _font;
 };

@@ -12,6 +12,8 @@
 #include <vector>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
+#include "Spacer.h"
+
 using namespace QTip;
 
 class BlocksView final : public View {
@@ -46,9 +48,9 @@ protected:
 private:
     void processDeletions();
     void createBlockViews();
+    void addBlockView(Block& block, bool moveSpacer = false);
     void addBlock();
     void updateLayout();
-    void resizeBlock(BlockView& block);
     void handleExpansion(BlockView& block);
     void showDeleteConfirmation(BlockView& block) const;
 
@@ -62,9 +64,9 @@ private:
 
     ScrollView _scrollView;
     List* _blockList = nullptr;
+    Spacer* _spacer = nullptr;
 
     MagickButton _addButton;
-
 };
 
 #endif // QBUDGET_UI_BLOCKSVIEW_H

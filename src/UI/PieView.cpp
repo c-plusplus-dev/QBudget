@@ -154,8 +154,8 @@ private:
     float _expandProgress = 0.0f;
 };
 
-std::vector<Block> eligibleBlocks(const Database& database) {
-    std::vector<Block> blocks;
+std::vector<Block*> eligibleBlocks(const Database& database) {
+    std::vector<Block*> blocks;
     blocks.reserve(database.blocks().size());
 
     for (auto& block : database.blocks()) {
@@ -165,20 +165,20 @@ std::vector<Block> eligibleBlocks(const Database& database) {
             continue;
         }
 
-        blocks.push_back(*block);
+        blocks.push_back(&*block);
     }
 
     std::ranges::stable_sort(
         blocks,
-        [](const Block& lhs, const Block& rhs) {
-            const std::int64_t lhsTotal = lhs.total();
-            const std::int64_t rhsTotal = rhs.total();
+        [](const Block* lhs, const Block* rhs) {
+            const std::int64_t lhsTotal = lhs->total();
+            const std::int64_t rhsTotal = rhs->total();
 
             if (lhsTotal != rhsTotal) {
                return lhsTotal < rhsTotal;
             }
 
-            return lhs.name < rhs.name;
+            return lhs->name < rhs->name;
         }
     );
 
@@ -203,9 +203,9 @@ PieView::PieView(
           }
       ),
       _chart(
-          std::make_unique<PieChart<Block>>(
+          std::make_unique<PieChart<Block*>>(
               QTip::Rect{},
-              std::vector<PieChartItem<Block>>{},
+              std::vector<PieChartItem<Block*>>{},
               true
           )
       ) {
@@ -218,7 +218,7 @@ PieView::PieView(
     _chart->setTooltipRenderer(
         [](QTip::Window& window,
            const QTip::Font& font,
-           Block& block,
+           Block*& block,
            double value,
            double percent,
            std::uint8_t alpha) {
@@ -234,7 +234,7 @@ PieView::PieView(
             const std::string percentText = percentStream.str();
 
             window->renderText(
-                font, block.name.c_str(), 5.0f, 5.0f, textColor
+                font, block->name.c_str(), 5.0f, 5.0f, textColor
             );
             window->renderText(
                 font, valueText.c_str(), 5.0f, 25.0f, textColor
@@ -255,7 +255,7 @@ void PieView::refresh() {
 }
 
 void PieView::refreshDataIfNeeded() {
-    const std::vector<Block> currentBlocks = eligibleBlocks(_database);
+    const std::vector<Block*> currentBlocks = eligibleBlocks(_database);
 
     if (currentBlocks.size() != _entries.size()) {
         rebuildData();
@@ -263,19 +263,19 @@ void PieView::refreshDataIfNeeded() {
     }
 
     for (std::size_t i = 0; i < currentBlocks.size(); ++i) {
-        const Block& current = currentBlocks[i];
+        auto current = currentBlocks[i];
         const Entry& previous = _entries[i];
 
-        if (current.name != previous.block.name ||
-            current.total() != previous.value ||
-            current.items.size() != previous.block.items.size()) {
+        if (current->name != previous.block->name ||
+            current->total() != previous.value ||
+            current->items.size() != previous.block->items.size()) {
             rebuildData();
             return;
         }
 
-        for (std::size_t itemIndex = 0; itemIndex < current.items.size(); ++itemIndex) {
-            if (current.items[itemIndex].name != previous.block.items[itemIndex].name ||
-                current.items[itemIndex].cost != previous.block.items[itemIndex].cost) {
+        for (std::size_t itemIndex = 0; itemIndex < current->items.size(); ++itemIndex) {
+            if (current->items[itemIndex]->name != previous.block->items[itemIndex]->name ||
+                current->items[itemIndex]->cost != previous.block->items[itemIndex]->cost) {
                 rebuildData();
                 return;
             }
@@ -284,18 +284,18 @@ void PieView::refreshDataIfNeeded() {
 }
 
 void PieView::rebuildData() {
-    std::vector<Block> blocks = eligibleBlocks(_database);
+    std::vector<Block*> blocks = eligibleBlocks(_database);
 
     double total = 0.0;
-    for (const Block& block : blocks) {
-        total += static_cast<double>(block.total());
+    for (auto block : blocks) {
+        total += static_cast<double>(block->total());
     }
 
     _entries.clear();
     _entries.reserve(blocks.size());
 
     for (std::size_t i = 0; i < blocks.size(); ++i) {
-        const std::int64_t value = blocks[i].total();
+        const std::int64_t value = blocks[i]->total();
         const double percent = total > 0.0
             ? static_cast<double>(value) / total
             : 0.0;
@@ -305,21 +305,21 @@ void PieView::rebuildData() {
             static_cast<double>(blocks.size());
 
         _entries.push_back({
-            std::move(blocks[i]),
+            blocks[i],
             value,
             percent,
             Detail::pieChartColor(colorPosition)
         });
     }
 
-    std::vector<PieChartItem<Block>> chartItems;
+    std::vector<PieChartItem<Block*>> chartItems;
     chartItems.reserve(_entries.size());
 
     for (const Entry& entry : _entries) {
         chartItems.push_back({
             entry.block,
             static_cast<double>(entry.value),
-            entry.block.name,
+            entry.block->name,
             entry.color
         });
     }
@@ -335,11 +335,11 @@ void PieView::rebuildData() {
     for (const auto & entry : _entries) {
         auto& row = _legendScrollView.add<PieLegendRow>(
             QTip::Rect{0.0f, 0.0f, 0.0f, kLegendRowHeight},
-            entry.block.name,
+            entry.block->name,
             entry.value,
             entry.percent,
             entry.color,
-            entry.block.items.size(),
+            entry.block->items.size(),
             _font
         );
 
@@ -369,7 +369,7 @@ void PieView::layout() {
 
     float rowY = 0.0f;
     for (std::size_t i = 0; i < _legendRows.size(); ++i) {
-        auto* row = static_cast<PieLegendRow*>(_legendRows[i]);
+        auto* row = dynamic_cast<PieLegendRow*>(_legendRows[i]);
         const float progress = i < _rowExpandProgress.size()
             ? _rowExpandProgress[i]
             : 0.0f;
@@ -412,7 +412,7 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
         return;
     }
 
-    auto* row = static_cast<PieLegendRow*>(_legendRows[index]);
+    auto* row = dynamic_cast<PieLegendRow*>(_legendRows[index]);
     const float rowTop = row->rect().origin.y;
     const float rowBottom = rowTop + row->rect().size.y;
     const float viewportTop = _legendScrollView.scrollPosition().y;

@@ -36,7 +36,7 @@ protected:
 
 private:
     struct Entry {
-        Block block;
+        Block* block = nullptr;
         std::int64_t value = 0;
         double percent = 0.0;
         QTip::Color color = QTip::Color::white;
@@ -47,7 +47,7 @@ private:
     Database& _database;
     QTip::Font& _font;
     ScrollView _legendScrollView;
-    std::unique_ptr<PieChart<Block>> _chart;
+    std::unique_ptr<PieChart<Block*>> _chart;
     std::vector<Entry> _entries;
     std::vector<UIObject*> _legendRows;
     std::vector<float> _rowExpandProgress;

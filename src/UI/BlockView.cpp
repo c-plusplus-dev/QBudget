@@ -9,6 +9,11 @@
 #include <string>
 #include <utility>
 #include <cinttypes>
+#include <charconv>
+#include <QTipUIKit/Containers/List.h>
+
+#include "Helpers.h"
+#include "Spacer.h"
 
 using namespace QTip;
 
@@ -23,18 +28,48 @@ constexpr float kItemTop = 45.0f;
 constexpr float kButtonSize = 30.0f;
 constexpr float kButtonInset = 5.0f;
 constexpr float kButtonSpacing = 5.0f;
+
+void drawAddIcon(Window& window, const Rect& rect) {
+    window->setRenderColor(Color::white);
+
+    const Point center = rect.center();
+    DrawThickLineHV(
+        window,
+        center.x, center.y - 10.0f,
+        center.x, center.y + 10.0f,
+        3
+    );
+    DrawThickLineHV(
+        window,
+        center.x - 10.0f, center.y,
+        center.x + 10.0f, center.y,
+        3
+    );
+}
+
+bool parse_int32(const std::string& input, int32_t& result) {
+    auto [ptr, ec] = std::from_chars(
+        input.data(),
+        input.data() + input.size(),
+        result
+    );
+
+    return ec == std::errc{} && ptr == input.data() + input.size();
+}
 }
 
 BlockView::BlockView(
     Rect rect,
     Block& block,
     Font& font,
-    OnExpandRequested expandRequested,
-    OnDeleteRequested deleteRequested
+    Action expandRequested,
+    Action deleteRequested,
+    Action addRequested
 )
     : _block(block),
       _expandRequested(std::move(expandRequested)),
       _deleteRequested(std::move(deleteRequested)),
+      _addRequested(std::move(addRequested)),
       _font(font) {
     _rect = rect;
     _preferredRect = rect;
@@ -54,6 +89,12 @@ BlockView::BlockView(
         0, 0, kButtonSize, kButtonSize, "◀", style
     );
 
+    _add = std::make_unique<MagickButton>(
+        Rect{0, 0, kButtonSize, kButtonSize},
+        style,
+        drawAddIcon
+    );
+
     _itemScrollView = std::make_unique<ScrollView>(
         Rect{},
         ScrollViewSettings{
@@ -63,6 +104,7 @@ BlockView::BlockView(
 
     _delete->parent = this;
     _expand->parent = this;
+    _add->parent = this;
     _itemScrollView->parent = this;
 
     _delete->setOnClick([this] {
@@ -83,6 +125,10 @@ BlockView::BlockView(
         }
     });
 
+    _add->setOnClick([this] {
+        onAddItem();
+    });
+
     syncItemViews();
     onResize();
 }
@@ -96,22 +142,22 @@ const Block& BlockView::block() const noexcept {
 }
 
 bool BlockView::handleEvent(const SDL_Event& event) {
-    if (!_delete->handleEvent(event)) {
+    if (!_expand->handleEvent(event))
         return false;
-    }
-
-    if (!_expand->handleEvent(event)) {
-        return false;
-    }
 
     if (expanded) {
         processDeletions();
 
         syncItemViews();
 
+        if (!_add->handleEvent(event))
+            return false;
+
         if (!_itemScrollView->handleEvent(event))
             return false;
-    }
+    } else
+        if (!_delete->handleEvent(event))
+            return false;
 
     return UIObject::handleEvent(event);
 }
@@ -153,19 +199,7 @@ void BlockView::syncItemViews() {
         _itemViews.reserve(_block.items.size());
 
         for (auto& item : _block.items) {
-            auto& itemView = _itemScrollView->add<ItemView>(
-                Rect{0, 0, 100, kItemHeight},
-                item,
-                _font,
-                [this] (ItemView& item) {
-                    onEdit(item);
-                },
-                [this] (ItemView& item) {
-                    onDelete(item);
-                }
-            );
-
-            _itemViews.push_back(&itemView);
+            addItem(*item);
         }
     }
 
@@ -209,12 +243,95 @@ void BlockView::layoutItemViews() const {
     _itemScrollView->setContentSize({right - left, itemsHeight});
 }
 
-void BlockView::onEdit(ItemView& item) {
+void BlockView::onEdit(ItemView& itemView) {
     if (!_window)
         return;
     Dialog& dialog = Dialog::create(*_window);
 
-    auto& content = dialog.content();
+    auto& c = dialog.content();
+    auto& content = c.add<List>(Rect{0, 0, c.rect().size});
+    auto& buttons = dialog.buttons();
+
+    auto& item = itemView.item();
+
+    content.add<Label>(
+        "Edit Item",
+        Color::white,
+        Point{0, 0},
+        _font
+    );
+
+    content.add<Spacer>(Rect{0, 0, 10, 20});
+
+    content.add<Label>(
+        "Name:",
+        Color::white,
+        Point{0, 32},
+        _font
+    );
+
+    auto& nameTextbox = content.add<Textbox>(
+        Rect{0, 64, 200, 0},
+        _font
+    );
+
+    nameTextbox.type(item.name);
+
+    content.add<Label>(
+        "Cost:",
+        Color::white,
+        Point{0, 96},
+        _font
+    );
+
+    auto& costTextbox = content.add<Textbox>(
+        Rect{0, 128, 200, 0},
+        _font
+    );
+
+    costTextbox.type(std::to_string(item.cost));
+
+    ButtonStyle style;
+    style.color = {50, 50, 50};
+    style.hoverColor = {70, 70, 70};
+    style.pressedColor = {30, 30, 30};
+    style.font = _font;
+    style.fontColor = Color::white;
+
+    auto& cancelButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Cancel",
+        style
+    );
+    cancelButton.setOnClick([&dialog] {
+        dialog.close();
+    });
+
+    auto& saveButton = buttons.add<Button>(
+        Rect{0, 0, 100, 100},
+        "Save",
+        style
+    );
+    saveButton.setOnClick([&] {
+        int32_t cost;
+        if (!parse_int32(costTextbox.getText(), cost)) {
+            std::cout << "Cost must be a number" << std::endl;
+            return;
+        }
+
+        item.name = nameTextbox.getText();
+        item.cost = cost;
+        dialog.close();
+    });
+}
+
+void BlockView::onDelete(ItemView& itemView) {
+    if (!_window)
+        return;
+    Dialog& dialog = Dialog::create(*_window);
+
+    auto& c = dialog.content();
+    auto& content = c.add<List>(Rect{0, 0, c.rect().size});
     auto& buttons = dialog.buttons();
 
     content.add<Label>(
@@ -224,15 +341,17 @@ void BlockView::onEdit(ItemView& item) {
         _font
     );
 
+    content.add<Spacer>(Rect{0, 0, 10, 20});
+
     content.add<Label>(
-        fmt("You're about to delete an item called: \"%s\"", item.item().name.c_str()),
+        fmt("You're about to delete an item called: \"%s\"", itemView.item().name.c_str()),
         Color::white,
         Point{0, 32},
         _font
     );
 
     content.add<Label>(
-        fmt("The item is worth: %" PRId32 "kr", item.item().cost),
+        fmt("The item is worth: %" PRId32 "kr", itemView.item().cost),
         Color::white,
         Point{0, 52},
         _font
@@ -263,40 +382,53 @@ void BlockView::onEdit(ItemView& item) {
         "Delete",
         style
     );
-    deleteButton.setOnClick([this, &item, &dialog] {
-        if (std::ranges::find(_itemsToDelete, &item) == _itemsToDelete.end()) {
-            _itemsToDelete.push_back(&item);
+    deleteButton.setOnClick([this, &itemView, &dialog] {
+        if (std::ranges::find(_itemsToDelete, &itemView) == _itemsToDelete.end()) {
+            _itemsToDelete.push_back(&itemView);
         }
         dialog.close();
     });
 }
 
-void BlockView::onDelete(ItemView& item) {
+void BlockView::onAddItem() {
     if (!_window)
         return;
     Dialog& dialog = Dialog::create(*_window);
 
-    auto& content = dialog.content();
+    auto& c = dialog.content();
+    auto& content = c.add<List>(Rect{0, 0, c.rect().size});
     auto& buttons = dialog.buttons();
 
     content.add<Label>(
-        "Are you sure?",
+        "Add Item",
         Color::white,
         Point{0, 0},
         _font
     );
 
+    content.add<Spacer>(Rect{0, 0, 10, 20});
+
     content.add<Label>(
-        fmt("You're about to delete an item called: \"%s\"", item.item().name.c_str()),
+        "Name:",
         Color::white,
         Point{0, 32},
         _font
     );
 
+    auto& nameTextbox = content.add<Textbox>(
+        Rect{0, 64, 200, 0},
+        _font
+    );
+
     content.add<Label>(
-        fmt("The item is worth: %" PRId32 "kr", item.item().cost),
+        "Cost:",
         Color::white,
-        Point{0, 52},
+        Point{0, 96},
+        _font
+    );
+
+    auto& costTextbox = content.add<Textbox>(
+        Rect{0, 128, 200, 0},
         _font
     );
 
@@ -316,26 +448,42 @@ void BlockView::onDelete(ItemView& item) {
         dialog.close();
     });
 
-    style.color = {255, 0, 0};
-    style.hoverColor = {255, 64, 64};
-    style.pressedColor = {255, 128, 128};
-
-    auto& deleteButton = buttons.add<Button>(
+    auto& createButton = buttons.add<Button>(
         Rect{0, 0, 100, 100},
-        "Delete",
+        "Create",
         style
     );
-    deleteButton.setOnClick([this, &item, &dialog] {
-        if (std::ranges::find(_itemsToDelete, &item) == _itemsToDelete.end()) {
-            _itemsToDelete.push_back(&item);
+    createButton.setOnClick([&] {
+        int32_t cost;
+        if (!parse_int32(costTextbox.getText(), cost)) {
+            std::cout << "Cost must be a number" << std::endl;
+            return;
         }
+        _block.items.push_back(std::make_unique<Block::Item>(nameTextbox.getText(), cost));
+        addItem(*_block.items.back());
         dialog.close();
     });
+}
+
+ItemView& BlockView::addItem(Block::Item& item) {
+    auto& itemView = _itemScrollView->add<ItemView>(
+        Rect{0, 0, 100, kItemHeight},
+        item,
+        _font,
+        [this] (ItemView& item) {
+            onEdit(item);
+        },
+        [this] (ItemView& item) {
+            onDelete(item);
+        }
+    );
+
+    _itemViews.push_back(&itemView);
+
+    return itemView;
 }
 
 void BlockView::processDeletions() {
-    bool changed = false;
-
     for (auto item : _itemsToDelete) {
         const auto it = std::ranges::find(_itemViews, item);
         if (it == _itemViews.end()) {
@@ -348,14 +496,9 @@ void BlockView::processDeletions() {
         _itemScrollView->remove(*item);
         _block.remove(model);
         _itemViews.erase(it);
-        changed = true;
     }
 
     _itemsToDelete.clear();
-
-    if (changed) {
-        syncItemViews();
-    }
 }
 
 void BlockView::onResize() {
@@ -365,7 +508,12 @@ void BlockView::onResize() {
     });
 
     _delete->reposition({
-        _rect.origin.x + _rect.size.x - 70.0f,
+        _expand->rect().origin.x - kButtonSize - kButtonSpacing,
+        _rect.origin.y + kButtonInset
+    });
+
+    _add->reposition({
+        _expand->rect().origin.x - kButtonSize - kButtonSpacing,
         _rect.origin.y + kButtonInset
     });
 
@@ -382,6 +530,13 @@ void BlockView::onResize() {
 }
 
 void BlockView::renderImpl(Window& window) {
+    if (!_moveTexture) {
+        _moveTexture = std::make_unique<Texture>(
+            window,
+            "assets/drag1.png"
+        );
+    }
+
     window->setRenderColor({30, 30, 30});
     window->renderRoundedRect(_rect, 10);
 
@@ -393,13 +548,21 @@ void BlockView::renderImpl(Window& window) {
         Color::white
     );
 
-    _delete->render(window);
     _expand->render(window);
 
     if (expanded) {
+        _add->render(window);
+
         syncItemViews();
 
         _itemScrollView->render(window);
+    } else {
+        _delete->render(window);
+
+        auto size = 24.0f;
+        auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
+        auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
+        window->renderTexture(*_moveTexture, Rect::zero, {x, y, size, size});
     }
 
     const std::string total = std::to_string(_block.total()) + "kr";

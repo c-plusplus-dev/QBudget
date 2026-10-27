@@ -15,6 +15,10 @@ class Block {
 public:
     class Item {
     public:
+        Item() = default;
+        Item(Item&& item) noexcept;
+        Item(std::string name, std::int32_t cost);
+
         std::string name;
         std::int32_t cost = 0;
 
@@ -24,8 +28,12 @@ public:
         Block* parent = nullptr;
     };
 
+    Block() = default;
+    Block(Block&& block) noexcept;
+    Block(std::string name, std::vector<std::unique_ptr<Item>> items);
+
     std::string name;
-    std::vector<Item> items;
+    std::vector<std::unique_ptr<Item>> items;
 
     [[nodiscard]] std::int64_t total() const;
 

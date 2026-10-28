@@ -23,8 +23,6 @@ public:
         QTip::Window& window,
         QTip::Font& font,
         Database& database,
-        std::vector<BlockView*>& blocks,
-        std::vector<BlockView*>& blocksToDelete,
         int currentMonth,
         int currentYear
     );
@@ -52,12 +50,12 @@ private:
     void addBlock();
     void updateLayout();
     void handleExpansion(BlockView& block);
-    void showDeleteConfirmation(BlockView& block) const;
+    void showDeleteConfirmation(BlockView& block);
 
     Font& _font;
     Database& _database;
-    std::vector<BlockView*>& _blocks;
-    std::vector<BlockView*>& _blocksToDelete;
+    std::vector<BlockView*> _blocks;
+    std::vector<BlockView*> _blocksToDelete;
     int _currentMonth;
     int _currentYear;
     float _availableHeight = 0.0f;

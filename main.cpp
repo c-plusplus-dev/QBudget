@@ -9,6 +9,7 @@
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
 #include "Storage/Database.h"
+#include "Storage/DatabaseManager.h"
 #include "UI/BlocksView.h"
 #include "UI/PieView.h"
 
@@ -60,13 +61,6 @@ int main() {
     auto [width, height] = window.size();
 
     Font font("assets/JetBrainsMono-Regular.ttf", 16);
-    Database database = Database::load("example.qbdb");
-
-    Panel root({0, 0, width, height});
-
-    std::vector<BlockView*> blocks;
-    std::vector<BlockView*> blocksToDelete;
-    blocks.reserve(database.blocks().size());
 
     const auto now = std::chrono::system_clock::now();
     const auto today = std::chrono::floor<std::chrono::days>(now);
@@ -74,6 +68,14 @@ int main() {
 
     int currentMonth = static_cast<int>(static_cast<unsigned>(date.month()));
     int currentYear = static_cast<int>(date.year());
+
+    DatabaseManager manager{"testDatabase"};
+    auto* it = manager.get(currentYear, currentMonth);
+    if (!it)
+        return 1;
+    Database& database = *it;
+
+    Panel root({0, 0, width, height});
 
     auto& navigation = root.add<NavigationView>(
         Rect{0, 0, width, height},
@@ -90,8 +92,6 @@ int main() {
                 window,
                 font,
                 database,
-                blocks,
-                blocksToDelete,
                 currentMonth,
                 currentYear
             );

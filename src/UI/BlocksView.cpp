@@ -62,15 +62,11 @@ BlocksView::BlocksView(
     Window& window,
     Font& font,
     Database& database,
-    std::vector<BlockView*>& blocks,
-    std::vector<BlockView*>& blocksToDelete,
     int currentMonth,
     int currentYear
 )
     : _font(font),
       _database(database),
-      _blocks(blocks),
-      _blocksToDelete(blocksToDelete),
       _currentMonth(currentMonth),
       _currentYear(currentYear),
       _availableHeight(rect.size.y),
@@ -262,7 +258,7 @@ void BlocksView::handleExpansion(BlockView& block) {
     }
 }
 
-void BlocksView::showDeleteConfirmation(BlockView& block) const {
+void BlocksView::showDeleteConfirmation(BlockView& block) {
     if (!_window) {
         return;
     }

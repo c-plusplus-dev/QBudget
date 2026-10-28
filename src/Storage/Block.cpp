@@ -31,9 +31,12 @@ Block::Item Block::Item::readFrom(Reader& reader) {
 
 // bookmark: block
 
-Block::Block(Block&& block) noexcept {
-    items = std::move(block.items);
-    name = std::move(block.name);
+Block::Block(Block&& block) noexcept
+    : items(std::move(block.items)),
+      name(std::move(block.name)) {
+    for (auto& item : items) {
+        item->parent = this;
+    }
 }
 
 Block::Block(std::string name, std::vector<std::unique_ptr<Item>> items) {
@@ -60,13 +63,24 @@ void Block::writeTo(Writer& writer) const {
 Block Block::readFrom(Reader& reader) {
     Block block{};
     block.name = reader.readString();
-    uint64_t length = reader.read64();
-    for (uint64_t i = 0; i < length; i++) {
-        block.items.push_back(std::move(std::make_unique<Item>(Item::readFrom(reader))));
-        auto& item = block.items.back();
+
+    const std::uint64_t length = reader.read64();
+    if (length > block.items.max_size()) {
+        throw std::runtime_error("Block contains too many items");
+    }
+
+    block.items.reserve(static_cast<std::size_t>(length));
+    for (std::uint64_t i = 0; i < length; ++i) {
+        block.items.push_back(
+            std::make_unique<Item>(Item::readFrom(reader))
+        );
+    }
+
+    for (auto& item : block.items) {
         item->parent = &block;
     }
-    return std::move(block);
+
+    return block;
 }
 
 void Block::remove(Item& item) {

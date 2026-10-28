@@ -27,6 +27,8 @@ add_executable(QBudget
         src/UI/BlocksView.h
         src/UI/PieView.cpp
         src/UI/PieView.h
+        src/Storage/DatabaseManager.cpp
+        src/Storage/DatabaseManager.h
 )
 
 target_include_directories(QBudget PUBLIC

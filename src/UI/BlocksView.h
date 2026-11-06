@@ -78,7 +78,7 @@ private:
     void animateDragLayout(float dt);
     void rebuildBlockViews();
     void reorderBlock(std::size_t source, std::size_t destination);
-    void reorderItem(BlockView& block, std::size_t source, std::size_t destination);
+    static void reorderItem(BlockView& block, std::size_t source, std::size_t destination);
 
     Font& _font;
     Database& _database;

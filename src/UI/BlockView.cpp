@@ -141,38 +141,35 @@ const Block& BlockView::block() const noexcept {
     return _block;
 }
 
+void BlockView::setExpanded(const bool value) {
+    if (expanded == value) {
+        return;
+    }
+
+    expanded = value;
+    _expand->setText(expanded ? "▼" : "◀");
+    syncItemViews();
+    onResize();
+}
+
 bool BlockView::handleEvent(const Event& event) {
-    if (!_expand->handleEvent(event))
+    if (!_expand->handleEvent(event)) {
         return false;
+    }
 
     if (expanded) {
         processDeletions();
-
         syncItemViews();
 
-        if (!_add->handleEvent(event))
+        if (!_add->handleEvent(event)) {
             return false;
-
-        if (!_itemScrollView->handleEvent(event))
-            return false;
-    } else {
-        if (!_delete->handleEvent(event))
-            return false;
-
-        switch (event.type) {
-            case EventType::MouseButtonPressed: {
-                auto size = 24.0f;
-                auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
-                auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
-                if (!Rect{x, y, size, size}.isPointInside(event.mouseButton.position))
-                    break;
-
-
-            }
-
-            default:
-                break;
         }
+
+        if (!_itemScrollView->handleEvent(event)) {
+            return false;
+        }
+    } else if (!_delete->handleEvent(event)) {
+        return false;
     }
 
     return UIObject::handleEvent(event);
@@ -220,6 +217,21 @@ void BlockView::syncItemViews() {
     }
 
     layoutItemViews();
+}
+
+void BlockView::rebuildItemViews() {
+    const Point previousScroll = _itemScrollView->scrollPosition();
+
+    _itemViews.clear();
+    _itemScrollView->clear();
+    _itemViews.reserve(_block.items.size());
+
+    for (const auto& item : _block.items) {
+        addItem(*item);
+    }
+
+    layoutItemViews();
+    _itemScrollView->scrollTo(previousScroll);
 }
 
 void BlockView::layoutItemViews() const {
@@ -570,15 +582,72 @@ void BlockView::renderImpl(Window& window) {
         _add->render(window);
 
         syncItemViews();
-
         _itemScrollView->render(window);
     } else {
         _delete->render(window);
+    }
 
-        auto size = 24.0f;
-        auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
-        auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
-        window->renderTexture(*_moveTexture, Rect::zero, {x, y, size, size});
+    // Keep the block handle available in both expanded and collapsed states.
+    const float handleSize = 24.0f;
+    const float handleX = _rect.origin.x + _rect.size.x - handleSize - 5.0f;
+    const float handleY = _rect.origin.y + _rect.size.y - handleSize - 5.0f;
+    window->renderTexture(
+        *_moveTexture,
+        Rect::zero,
+        {handleX, handleY, handleSize, handleSize}
+    );
+
+    // Draw the insertion marker in the block's content coordinates. It is
+    // clipped manually to the item viewport so it cannot cover the header.
+    if (expanded && _itemDropIndex && !_itemViews.empty()) {
+        std::size_t slot = std::min(*_itemDropIndex, _itemViews.size());
+        if (_itemDropSourceIndex && slot >= *_itemDropSourceIndex) {
+            ++slot;
+        }
+
+        const bool atEnd = slot >= _itemViews.size();
+        const Rect itemRect = atEnd
+            ? _itemViews.back()->rect()
+            : _itemViews[slot]->rect();
+
+        const float markerContentX = atEnd
+            ? itemRect.origin.x + itemRect.size.x + 2.0f
+            : itemRect.origin.x - 4.0f;
+
+        const Rect viewport = _itemScrollView->rect();
+        const Point scroll = _itemScrollView->scrollPosition();
+
+        if (viewport.size.x >= 3.0f && viewport.size.y > 0.0f) {
+            const float markerX = std::clamp(
+                viewport.origin.x + markerContentX - scroll.x,
+                viewport.origin.x,
+                viewport.origin.x + viewport.size.x - 3.0f
+            );
+            const float requestedY =
+                viewport.origin.y + itemRect.origin.y - scroll.y;
+            const float markerY = std::max(
+                requestedY,
+                viewport.origin.y
+            );
+            const float markerBottom = std::min(
+                requestedY + kItemHeight,
+                viewport.origin.y + viewport.size.y
+            );
+            const float markerHeight = std::max(
+                0.0f,
+                markerBottom - markerY
+            );
+
+            if (markerHeight > 0.0f) {
+                window->setRenderColor({135, 220, 135});
+                window->renderRect({
+                    markerX,
+                    markerY,
+                    3.0f,
+                    markerHeight
+                });
+            }
+        }
     }
 
     const std::string total = std::to_string(_block.total()) + "kr";

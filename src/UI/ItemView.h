@@ -45,6 +45,8 @@ protected:
     void renderImpl(QTip::Window& window) override;
 
 private:
+    friend class BlocksView;
+
     void updateLayout();
 
     [[nodiscard]] float calculateWidth() const;

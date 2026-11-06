@@ -9,6 +9,8 @@
 #include "Storage/Database.h"
 #include "UI/BlockView.h"
 
+#include <cstddef>
+#include <optional>
 #include <vector>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
@@ -52,6 +54,32 @@ private:
     void handleExpansion(BlockView& block);
     void showDeleteConfirmation(BlockView& block);
 
+    enum class DragType {
+        Block,
+        Item
+    };
+
+    struct DragState {
+        DragType type = DragType::Block;
+        BlockView* blockView = nullptr;
+        ItemView* itemView = nullptr;
+        std::size_t sourceIndex = 0;
+        std::size_t dropIndex = 0;
+        QTip::Point startPosition{};
+        QTip::Point pointerPosition{};
+        QTip::Point grabOffset{};
+        bool moved = false;
+    };
+
+    [[nodiscard]] bool beginDrag(QTip::Point position);
+    void updateDrag(QTip::Point position);
+    void finishDrag();
+    void clearDragIndicators();
+    void animateDragLayout(float dt);
+    void rebuildBlockViews();
+    void reorderBlock(std::size_t source, std::size_t destination);
+    static void reorderItem(BlockView& block, std::size_t source, std::size_t destination);
+
     Font& _font;
     Database& _database;
     std::vector<BlockView*> _blocks;
@@ -65,6 +93,10 @@ private:
     Spacer* _spacer = nullptr;
 
     MagickButton _addButton;
+
+    std::optional<DragState> _drag;
+    QTip::Rect _dragPlaceholder{};
+    bool _hasDragPlaceholder = false;
 };
 
 #endif // QBUDGET_UI_BLOCKSVIEW_H

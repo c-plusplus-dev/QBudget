@@ -141,38 +141,35 @@ const Block& BlockView::block() const noexcept {
     return _block;
 }
 
+void BlockView::setExpanded(const bool value) {
+    if (expanded == value) {
+        return;
+    }
+
+    expanded = value;
+    _expand->setText(expanded ? "▼" : "◀");
+    syncItemViews();
+    onResize();
+}
+
 bool BlockView::handleEvent(const Event& event) {
-    if (!_expand->handleEvent(event))
+    if (!_expand->handleEvent(event)) {
         return false;
+    }
 
     if (expanded) {
         processDeletions();
-
         syncItemViews();
 
-        if (!_add->handleEvent(event))
+        if (!_add->handleEvent(event)) {
             return false;
-
-        if (!_itemScrollView->handleEvent(event))
-            return false;
-    } else {
-        if (!_delete->handleEvent(event))
-            return false;
-
-        switch (event.type) {
-            case EventType::MouseButtonPressed: {
-                auto size = 24.0f;
-                auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
-                auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
-                if (!Rect{x, y, size, size}.isPointInside(event.mouseButton.position))
-                    break;
-
-
-            }
-
-            default:
-                break;
         }
+
+        if (!_itemScrollView->handleEvent(event)) {
+            return false;
+        }
+    } else if (!_delete->handleEvent(event)) {
+        return false;
     }
 
     return UIObject::handleEvent(event);
@@ -222,7 +219,26 @@ void BlockView::syncItemViews() {
     layoutItemViews();
 }
 
+void BlockView::rebuildItemViews() {
+    const Point previousScroll = _itemScrollView->scrollPosition();
+
+    _itemViews.clear();
+    _itemScrollView->clear();
+    _itemViews.reserve(_block.items.size());
+
+    for (const auto& item : _block.items) {
+        addItem(*item);
+    }
+
+    layoutItemViews();
+    _itemScrollView->scrollTo(previousScroll);
+}
+
 void BlockView::layoutItemViews() const {
+    if (_manualItemLayout) {
+        return;
+    }
+
     if (!expanded || _itemViews.empty()) {
         _itemScrollView->setContentSize({0.0f, 0.0f});
         return;
@@ -570,16 +586,20 @@ void BlockView::renderImpl(Window& window) {
         _add->render(window);
 
         syncItemViews();
-
         _itemScrollView->render(window);
     } else {
         _delete->render(window);
-
-        auto size = 24.0f;
-        auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
-        auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
-        window->renderTexture(*_moveTexture, Rect::zero, {x, y, size, size});
     }
+
+    // Keep the block handle available in both expanded and collapsed states.
+    const float handleSize = 24.0f;
+    const float handleX = _rect.origin.x + _rect.size.x - handleSize - 5.0f;
+    const float handleY = _rect.origin.y + _rect.size.y - handleSize - 5.0f;
+    window->renderTexture(
+        *_moveTexture,
+        Rect::zero,
+        {handleX, handleY, handleSize, handleSize}
+    );
 
     const std::string total = std::to_string(_block.total()) + "kr";
 

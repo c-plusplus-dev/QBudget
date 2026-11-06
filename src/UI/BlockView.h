@@ -6,8 +6,10 @@
 #ifndef QBUDGET_BLOCKVIEW_H
 #define QBUDGET_BLOCKVIEW_H
 
+#include <cstddef>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <QTipUIKit/UIKit.h>
@@ -35,6 +37,8 @@ public:
     [[nodiscard]] Block& block() noexcept;
     [[nodiscard]] const Block& block() const noexcept;
 
+    void setExpanded(bool expanded);
+
     bool handleEvent(const QTip::Event& event) override;
 
     [[nodiscard]] QTip::Point minimumSize() const override;
@@ -51,8 +55,11 @@ protected:
     void renderImpl(QTip::Window& window) override;
 
 private:
+    friend class BlocksView;
+
     void onResize();
     void syncItemViews();
+    void rebuildItemViews();
     void layoutItemViews() const;
 
     void onEdit(ItemView& itemView);
@@ -73,6 +80,9 @@ private:
 
     std::vector<ItemView*> _itemViews;
     std::unique_ptr<ScrollView> _itemScrollView;
+    std::optional<std::size_t> _itemDropIndex;
+    std::optional<std::size_t> _itemDropSourceIndex;
+    bool _manualItemLayout = false;
 
     std::vector<ItemView*> _itemsToDelete;
 

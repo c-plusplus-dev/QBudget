@@ -67,6 +67,7 @@ private:
         std::size_t dropIndex = 0;
         QTip::Point startPosition{};
         QTip::Point pointerPosition{};
+        QTip::Point grabOffset{};
         bool moved = false;
     };
 

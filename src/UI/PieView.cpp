@@ -10,8 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include <SDL3/SDL_events.h>
-
 #include <QTipUIKit/Internal/Helpers.h>
 
 #include "Spacer.h"
@@ -47,7 +45,7 @@ public:
         _preferredRect = rect;
     }
 
-    bool handleEvent(const SDL_Event&) override {
+    bool handleEvent(const QTip::Event&) override {
         // Legend rows are display-only. Hover interactions are driven exclusively
         // by PieChart::hoveredIndex().
         return true;
@@ -434,13 +432,13 @@ void PieView::scrollEntryIntoView(const std::size_t index) {
     _targetScrollY = std::max(0.0f, targetY);
 }
 
-bool PieView::handleEvent(const SDL_Event& event) {
-    if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+bool PieView::handleEvent(const QTip::Event& event) {
+    if (event.type == QTip::EventType::MouseScrolled) {
         _manualScrolling = true;
-    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+    } else if (event.type == QTip::EventType::MouseButtonPressed) {
         const QTip::Point mouse{
-            event.button.x,
-            event.button.y
+            event.mouseButton.position.x,
+            event.mouseButton.position.y
         };
 
         if (_legendScrollView.rect().isPointInside(mouse)) {

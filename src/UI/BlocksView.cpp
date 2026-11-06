@@ -436,7 +436,7 @@ Point BlocksView::preferredSize() const {
     return _preferredRect.size;
 }
 
-bool BlocksView::handleEvent(const SDL_Event& event) {
+bool BlocksView::handleEvent(const Event& event) {
     processDeletions();
 
     if (!_addButton.handleEvent(event)) {
@@ -492,4 +492,14 @@ void BlocksView::renderImpl(Window& window) {
         _rect.origin.y + _rect.size.y - 22.0f,
         Color::white
     );
+
+    if (_blocks.empty()) {
+        window->renderText(
+            _font,
+            "No blocks yet. Press + to create a new one ->",
+            _rect.origin.x + _rect.size.x - 490,
+            _rect.origin.y + 5.0f,
+            Color::white
+        );
+    }
 }

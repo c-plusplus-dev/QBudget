@@ -20,7 +20,7 @@ public:
 
     void refresh();
 
-    bool handleEvent(const SDL_Event& event) override;
+    bool handleEvent(const QTip::Event& event) override;
     void tick(QTip::Clock& clock, double dt) override;
 
     [[nodiscard]] QTip::Point minimumSize() const override;

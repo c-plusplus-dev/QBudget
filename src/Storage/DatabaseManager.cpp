@@ -54,6 +54,21 @@ const Database* DatabaseManager::get(int year, int month) const {
     return entry->database.get();
 }
 
+Database& DatabaseManager::getOrCreate(int year, int month) {
+    if (auto* it = get(year, month))
+        return *it;
+
+    auto entry = std::make_unique<Entry>(
+        true,
+        std::make_unique<Database>()
+    );
+
+    auto* result = entry->database.get();
+    _cache.emplace(std::pair{year, month}, std::move(entry));
+
+    return *result;
+}
+
 void DatabaseManager::save(int year, int month) {
     auto it = getEntry(year, month);
     if (!it)

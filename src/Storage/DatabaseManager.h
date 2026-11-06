@@ -16,6 +16,8 @@ public:
     [[nodiscard]] Database* get(int year, int month);
     [[nodiscard]] const Database* get(int year, int month) const;
 
+    [[nodiscard]] Database& getOrCreate(int year, int month);
+
     void save(int year, int month);
     void saveAll();
 

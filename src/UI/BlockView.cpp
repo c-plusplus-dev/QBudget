@@ -141,7 +141,7 @@ const Block& BlockView::block() const noexcept {
     return _block;
 }
 
-bool BlockView::handleEvent(const SDL_Event& event) {
+bool BlockView::handleEvent(const Event& event) {
     if (!_expand->handleEvent(event))
         return false;
 
@@ -155,9 +155,25 @@ bool BlockView::handleEvent(const SDL_Event& event) {
 
         if (!_itemScrollView->handleEvent(event))
             return false;
-    } else
+    } else {
         if (!_delete->handleEvent(event))
             return false;
+
+        switch (event.type) {
+            case EventType::MouseButtonPressed: {
+                auto size = 24.0f;
+                auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
+                auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
+                if (!Rect{x, y, size, size}.isPointInside(event.mouseButton.position))
+                    break;
+
+
+            }
+
+            default:
+                break;
+        }
+    }
 
     return UIObject::handleEvent(event);
 }

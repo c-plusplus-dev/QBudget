@@ -91,7 +91,7 @@ const Block::Item& ItemView::item() const {
     return *_item;
 }
 
-bool ItemView::handleEvent(const SDL_Event& event) {
+bool ItemView::handleEvent(const Event& event) {
     if (!_deleteButton->handleEvent(event)) {
         return false;
     }

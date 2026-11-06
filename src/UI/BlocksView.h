@@ -37,7 +37,7 @@ public:
     [[nodiscard]] QTip::Point minimumSize() const override;
     [[nodiscard]] QTip::Point preferredSize() const override;
 
-    bool handleEvent(const SDL_Event& event) override;
+    bool handleEvent(const Event& event) override;
     void tick(QTip::Clock& clock, double dt) override;
 
 protected:

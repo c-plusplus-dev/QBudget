@@ -70,10 +70,7 @@ int main() {
     int currentYear = static_cast<int>(date.year());
 
     DatabaseManager manager{"testDatabase"};
-    auto* it = manager.get(currentYear, currentMonth);
-    if (!it)
-        return 1;
-    Database& database = *it;
+    auto& database = manager.getOrCreate(currentYear, currentMonth);
 
     Panel root({0, 0, width, height});
 
@@ -115,7 +112,7 @@ int main() {
     Point previousWindowSize{-1, -1};
 
     while (!window.shouldClose()) {
-        QTipRuntime::pollEvents();
+        QTipRuntime::fetchEvents();
 
         const Point currentWindowSize = window.size();
         if (currentWindowSize != previousWindowSize) {

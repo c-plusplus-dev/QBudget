@@ -167,6 +167,7 @@ void ItemView::updateLayout() {
     });
 }
 
+void ItemView::renderImpl(Window& window) {
     if (!_editButtonTexture) {
         _editButtonTexture = std::make_unique<Texture>(
             window,

@@ -83,6 +83,7 @@ private:
     std::optional<std::size_t> _itemDropIndex;
     std::optional<std::size_t> _itemDropSourceIndex;
     bool _dragging = false;
+    bool _manualItemLayout = false;
 
     std::vector<ItemView*> _itemsToDelete;
 

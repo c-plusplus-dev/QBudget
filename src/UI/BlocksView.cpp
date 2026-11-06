@@ -668,7 +668,7 @@ void BlocksView::animateDragLayout(const float dt) {
 
     if (_drag->type == DragType::Block && _drag->blockView) {
         BlockView* dragged = _drag->blockView;
-        float y = _blocks.empty() ? 0.0f : _blocks.front()->rect().origin.y;
+        float y = 0.0f;
         std::size_t remainingIndex = 0;
 
         for (BlockView* blockView : _blocks) {
@@ -729,6 +729,12 @@ void BlocksView::animateDragLayout(const float dt) {
 
     auto placePlaceholder = [&] {
         const Rect itemRect = _drag->itemView->rect();
+
+        if (x > 0.0f && x + itemRect.size.x > availableWidth) {
+            x = 0.0f;
+            y += rowStep;
+        }
+
         _dragPlaceholder = {
             viewport.origin + Point{x - innerScroll.x, y - innerScroll.y} -
                 outerScroll,
@@ -736,10 +742,6 @@ void BlocksView::animateDragLayout(const float dt) {
         };
         _hasDragPlaceholder = true;
         x += itemRect.size.x + kItemRowSpacing;
-        if (x > 0.0f && x > availableWidth) {
-            x = 0.0f;
-            y += rowStep;
-        }
     };
 
     for (ItemView* itemView : itemViews) {

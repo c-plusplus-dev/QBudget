@@ -52,7 +52,6 @@ private:
     [[nodiscard]] float calculateWidth() const;
 
     Block::Item* _item = nullptr;
-    bool _dragging = false;
     QTip::Font& _font;
 
     std::unique_ptr<Button> _deleteButton;

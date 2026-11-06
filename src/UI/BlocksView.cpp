@@ -16,54 +16,54 @@
 using namespace QTip;
 
 namespace {
-constexpr float kVerticalInset = 25.0f;
-constexpr float kBlockHeight = 100.0f;
-constexpr float kBlockSpacing = 10.0f;
-constexpr float kBottomSpacerHeight = 60.0f;
-constexpr float kExpandedHeightReduction = 100.0f;
-constexpr float kAddBlockButtonSize = 30.0f;
-constexpr float kDragHandleSize = 24.0f;
-constexpr float kDragHandleInset = 5.0f;
-constexpr float kItemHeight = 100.0f;
-constexpr float kItemRowSpacing = 10.0f;
-constexpr float kDragStartDistance = 5.0f;
-constexpr float kAutoScrollEdge = 28.0f;
-constexpr float kAutoScrollSpeed = 520.0f;
+    constexpr float kVerticalInset = 25.0f;
+    constexpr float kBlockHeight = 100.0f;
+    constexpr float kBlockSpacing = 10.0f;
+    constexpr float kBottomSpacerHeight = 60.0f;
+    constexpr float kExpandedHeightReduction = 100.0f;
+    constexpr float kAddBlockButtonSize = 30.0f;
+    constexpr float kDragHandleSize = 24.0f;
+    constexpr float kDragHandleInset = 5.0f;
+    constexpr float kItemHeight = 100.0f;
+    constexpr float kItemRowSpacing = 10.0f;
+    constexpr float kDragStartDistance = 5.0f;
+    constexpr float kAutoScrollEdge = 28.0f;
+    constexpr float kAutoScrollSpeed = 520.0f;
 
-float nonNegative(const float value) {
-    return std::max(0.0f, value);
+    float nonNegative(const float value) {
+        return std::max(0.0f, value);
+    }
+
+    ButtonStyle makeAddButtonStyle(const Font& font) {
+        ButtonStyle style{};
+        style.color = Color::clear;
+        style.hoverColor = {40, 40, 40};
+        style.pressedColor = {50, 50, 50};
+        style.font = font;
+        style.fontColor = Color::white;
+        return style;
+    }
+
+    void drawAddIcon(Window& window, const Rect& rect) {
+        window->setRenderColor(Color::white);
+
+        const Point center = rect.center();
+
+        DrawThickLineHV(
+            window,
+            center.x, center.y - 10.0f,
+            center.x, center.y + 10.0f,
+            3
+        );
+
+        DrawThickLineHV(
+            window,
+            center.x - 10.0f, center.y,
+            center.x + 10.0f, center.y,
+            3
+        );
+    }
 }
-
-ButtonStyle makeAddButtonStyle(const Font& font) {
-    ButtonStyle style{};
-    style.color = Color::clear;
-    style.hoverColor = {40, 40, 40};
-    style.pressedColor = {50, 50, 50};
-    style.font = font;
-    style.fontColor = Color::white;
-    return style;
-}
-
-void drawAddIcon(Window& window, const Rect& rect) {
-    window->setRenderColor(Color::white);
-
-    const Point center = rect.center();
-
-    DrawThickLineHV(
-        window,
-        center.x, center.y - 10.0f,
-        center.x, center.y + 10.0f,
-        3
-    );
-
-    DrawThickLineHV(
-        window,
-        center.x - 10.0f, center.y,
-        center.x + 10.0f, center.y,
-        3
-    );
-}
-
 
 BlocksView::BlocksView(
     const Rect rect,
@@ -450,9 +450,7 @@ bool BlocksView::beginDrag(const Point position) {
 
     // Item handles take precedence over the block handle because an expanded
     // block can have its last item close to the block's lower-right corner.
-    for (std::size_t blockIndex = 0; blockIndex < _blocks.size(); ++blockIndex) {
-        BlockView* blockView = _blocks[blockIndex];
-
+    for (auto blockView : _blocks) {
         if (!blockView->expanded) {
             continue;
         }
@@ -1042,6 +1040,11 @@ void BlocksView::tick(Clock& clock, const double dt) {
 }
 
 void BlocksView::renderImpl(Window& window) {
+    if (_drag && _drag->moved && _hasDragPlaceholder) {
+        window->setRenderColor({12, 12, 12});
+        window->renderRoundedRect(_dragPlaceholder, 10);
+    }
+
     _scrollView.render(window);
 
     _addButton.render(window);
@@ -1094,8 +1097,4 @@ void BlocksView::renderImpl(Window& window) {
             Color::white
         );
     }
-
-    if (_drag && _drag->moved && _hasDragPlaceholder) {
-        window->setRenderColor({12, 12, 12});
-        window->renderRoundedRect(_dragPlaceholder, 10);
-    }}
+}

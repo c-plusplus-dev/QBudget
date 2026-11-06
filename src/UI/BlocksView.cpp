@@ -63,6 +63,121 @@ void drawAddIcon(Window& window, const Rect& rect) {
         3
     );
 }
+
+void renderDragItemCard(
+    Window& window,
+    const Rect& rect,
+    const Block::Item& item,
+    Font& font,
+    const Color background,
+    const Color foreground
+) {
+    window->setRenderColor(background);
+    window->renderRoundedRect(rect, 10);
+
+    window->renderText(
+        font,
+        item.name.c_str(),
+        rect.origin.x + 10.0f,
+        rect.origin.y + 10.0f,
+        foreground
+    );
+
+    const std::string cost = std::to_string(item.cost) + "kr";
+    window->renderText(
+        font,
+        cost.c_str(),
+        rect.origin.x + 10.0f,
+        rect.origin.y + 70.0f,
+        foreground
+    );
+}
+
+float dragItemWidth(const Block::Item& item, Font& font) {
+    const std::string cost = std::to_string(item.cost) + "kr";
+
+    return std::max({
+        110.0f,
+        font.getTextWidth(item.name) + 50.0f,
+        font.getTextWidth(cost) + 20.0f
+    });
+}
+
+void renderDragBlockCard(
+    Window& window,
+    const Rect& rect,
+    const Block& block,
+    const bool expanded,
+    Font& font,
+    const Color background,
+    const Color foreground,
+    const Color itemBackground
+) {
+    window->setRenderColor(background);
+    window->renderRoundedRect(rect, 10);
+
+    window->renderText(
+        font,
+        block.name.c_str(),
+        rect.origin.x + 10.0f,
+        rect.origin.y + 10.0f,
+        foreground
+    );
+
+    const std::string total = std::to_string(block.total()) + "kr";
+    window->renderText(
+        font,
+        total.c_str(),
+        rect.origin.x + 10.0f,
+        rect.origin.y + rect.size.y - 26.0f,
+        foreground
+    );
+
+    if (!expanded) {
+        return;
+    }
+
+    const float left = rect.origin.x + 20.0f;
+    const float right = rect.origin.x + rect.size.x - 20.0f;
+    const float bottom = rect.origin.y + rect.size.y - 35.0f;
+
+    float x = left;
+    float y = rect.origin.y + 45.0f;
+
+    for (const auto& item : block.items) {
+        if (!item) {
+            continue;
+        }
+
+        const float width = dragItemWidth(*item, font);
+
+        if (x > left && x + width > right) {
+            x = left;
+            y += kItemHeight + kItemRowSpacing;
+        }
+
+        if (y + kItemHeight > bottom) {
+            break;
+        }
+
+        renderDragItemCard(
+            window,
+            {
+                x,
+                y,
+                width,
+                kItemHeight
+            },
+            *item,
+            font,
+            itemBackground,
+            foreground
+        );
+
+        x += width + kItemRowSpacing;
+    }
+}
+
 }
 
 BlocksView::BlocksView(
@@ -496,7 +611,8 @@ bool BlocksView::beginDrag(const Point position) {
                 .sourceIndex = itemIndex,
                 .dropIndex = itemIndex,
                 .startPosition = position,
-                .pointerPosition = position
+                .pointerPosition = position,
+                .grabOffset = itemPosition - itemRect.origin
             };
             return true;
         }
@@ -525,7 +641,8 @@ bool BlocksView::beginDrag(const Point position) {
             .sourceIndex = blockIndex,
             .dropIndex = blockIndex,
             .startPosition = position,
-            .pointerPosition = position
+            .pointerPosition = position,
+            .grabOffset = listPosition - blockRect.origin
         };
         return true;
     }
@@ -553,6 +670,12 @@ void BlocksView::updateDrag(const Point position) {
 
     if (!_drag->moved) {
         return;
+    }
+
+    if (_drag->type == DragType::Block && _drag->blockView) {
+        _drag->blockView->_dragging = true;
+    } else if (_drag->type == DragType::Item && _drag->itemView) {
+        _drag->itemView->_dragging = true;
     }
 
     const Point listPosition = position + _scrollView.scrollPosition();
@@ -631,6 +754,11 @@ void BlocksView::clearDragIndicators() {
     for (BlockView* blockView : _blocks) {
         blockView->_itemDropIndex.reset();
         blockView->_itemDropSourceIndex.reset();
+        blockView->_dragging = false;
+
+        for (ItemView* itemView : blockView->_itemViews) {
+            itemView->_dragging = false;
+        }
     }
 }
 
@@ -895,48 +1023,6 @@ void BlocksView::tick(Clock& clock, const double dt) {
 void BlocksView::renderImpl(Window& window) {
     _scrollView.render(window);
 
-    if (_drag && _drag->moved &&
-        _drag->type == DragType::Block && !_blocks.empty()) {
-        const std::size_t insertionIndex = _drag->dropIndex;
-        const Point scroll = _scrollView.scrollPosition();
-
-        float markerY = 0.0f;
-        std::size_t visibleIndex = 0;
-        bool found = false;
-
-        for (BlockView* blockView : _blocks) {
-            if (blockView == _drag->blockView) {
-                continue;
-            }
-
-            const Rect rect = blockView->rect();
-            if (visibleIndex == insertionIndex) {
-                markerY = rect.origin.y - scroll.y - 3.0f;
-                found = true;
-                break;
-            }
-
-            ++visibleIndex;
-            markerY = rect.origin.y + rect.size.y - scroll.y + 3.0f;
-        }
-
-        if (found || visibleIndex > 0) {
-            markerY = std::clamp(
-                markerY,
-                0.0f,
-                std::max(0.0f, _scrollView.rect().size.y - 3.0f)
-            );
-
-            window->setRenderColor({135, 220, 135});
-            window->renderRect({
-                0.0f,
-                markerY,
-                _scrollView.rect().size.x,
-                3.0f
-            });
-        }
-    }
-
     _addButton.render(window);
 
     const float startY =
@@ -986,5 +1072,163 @@ void BlocksView::renderImpl(Window& window) {
             _rect.origin.y + 5.0f,
             Color::white
         );
+    }
+
+    if (_drag && _drag->moved) {
+        const Point outerScroll = _scrollView.scrollPosition();
+
+        if (_drag->type == DragType::Block && _drag->blockView &&
+            !_blocks.empty()) {
+            std::vector<BlockView*> remaining;
+            remaining.reserve(_blocks.size() - 1);
+
+            for (BlockView* blockView : _blocks) {
+                if (blockView != _drag->blockView) {
+                    remaining.push_back(blockView);
+                }
+            }
+
+            float targetY = _blocks.front()->rect().origin.y;
+
+            for (std::size_t index = 0;
+                 index < _drag->dropIndex && index < remaining.size();
+                 ++index) {
+                targetY += remaining[index]->rect().size.y + kBlockSpacing;
+            }
+
+            const Rect sourceRect = _drag->blockView->rect();
+            const Rect placeholderRect{
+                sourceRect.origin.x,
+                targetY - outerScroll.y,
+                sourceRect.size.x,
+                sourceRect.size.y
+            };
+
+            const float viewportHeight = _scrollView.rect().size.y;
+            if (placeholderRect.origin.y >= 0.0f &&
+                placeholderRect.origin.y + placeholderRect.size.y <= viewportHeight) {
+                renderDragBlockCard(
+                    window,
+                    placeholderRect,
+                    _drag->blockView->block(),
+                    _drag->blockView->expanded,
+                    _font,
+                    {8, 8, 8},
+                    {95, 95, 95},
+                    {15, 15, 15}
+                );
+            }
+        } else if (_drag->type == DragType::Item &&
+                   _drag->blockView && _drag->itemView &&
+                   _drag->blockView->expanded) {
+            BlockView* blockView = _drag->blockView;
+            const auto& itemViews = blockView->_itemViews;
+            const Rect itemViewport = blockView->_itemScrollView->rect();
+
+            if (_drag->sourceIndex < itemViews.size()) {
+                float x = 0.0f;
+                float y = 0.0f;
+                std::size_t placed = 0;
+                const float availableWidth =
+                    std::max(0.0f, blockView->rect().size.x - 40.0f);
+
+                for (std::size_t index = 0;
+                     index < itemViews.size() && placed < _drag->dropIndex;
+                     ++index) {
+                    if (index == _drag->sourceIndex) {
+                        continue;
+                    }
+
+                    const float width = itemViews[index]->rect().size.x;
+                    if (x > 0.0f && x + width > availableWidth) {
+                        x = 0.0f;
+                        y += kItemHeight + kItemRowSpacing;
+                    }
+
+                    x += width + kItemRowSpacing;
+                    ++placed;
+                }
+
+                const float draggedWidth = _drag->itemView->rect().size.x;
+                if (x > 0.0f && x + draggedWidth > availableWidth) {
+                    x = 0.0f;
+                    y += kItemHeight + kItemRowSpacing;
+                }
+
+                const Point innerScroll =
+                    blockView->_itemScrollView->scrollPosition();
+                const Rect placeholderRect{
+                    itemViewport.origin.x + x - innerScroll.x - outerScroll.x,
+                    itemViewport.origin.y + y - innerScroll.y - outerScroll.y,
+                    draggedWidth,
+                    _drag->itemView->rect().size.y
+                };
+
+                const Rect itemViewportOnScreen{
+                    itemViewport.origin - outerScroll,
+                    itemViewport.size
+                };
+
+                const bool insideItemViewport =
+                    placeholderRect.origin.x >= itemViewportOnScreen.origin.x &&
+                    placeholderRect.origin.y >= itemViewportOnScreen.origin.y &&
+                    placeholderRect.origin.x + placeholderRect.size.x <=
+                        itemViewportOnScreen.origin.x + itemViewportOnScreen.size.x &&
+                    placeholderRect.origin.y + placeholderRect.size.y <=
+                        itemViewportOnScreen.origin.y + itemViewportOnScreen.size.y;
+
+                const bool insideListViewport =
+                    placeholderRect.origin.y >= 0.0f &&
+                    placeholderRect.origin.y + placeholderRect.size.y <=
+                        _scrollView.rect().size.y;
+
+                if (insideItemViewport && insideListViewport) {
+                    renderDragItemCard(
+                        window,
+                        placeholderRect,
+                        _drag->itemView->item(),
+                        _font,
+                        {8, 8, 8},
+                        {95, 95, 95}
+                    );
+                }
+            }
+        }
+
+        const Point floatingOrigin =
+            _drag->pointerPosition - _drag->grabOffset;
+
+        if (_drag->type == DragType::Block && _drag->blockView) {
+            BlockView* blockView = _drag->blockView;
+            const Rect floatingRect{
+                floatingOrigin,
+                blockView->rect().size
+            };
+
+            renderDragBlockCard(
+                window,
+                floatingRect,
+                blockView->block(),
+                blockView->expanded,
+                _font,
+                {52, 52, 52},
+                Color::white,
+                {68, 68, 68}
+            );
+        } else if (_drag->type == DragType::Item && _drag->itemView) {
+            const Rect floatingRect{
+                floatingOrigin,
+                _drag->itemView->rect().size
+            };
+
+            renderDragItemCard(
+                window,
+                floatingRect,
+                _drag->itemView->item(),
+                _font,
+                {52, 52, 52},
+                Color::white
+            );
+        }
     }
 }

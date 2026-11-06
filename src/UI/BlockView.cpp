@@ -558,6 +558,10 @@ void BlockView::onResize() {
 }
 
 void BlockView::renderImpl(Window& window) {
+    if (_dragging) {
+        return;
+    }
+
     if (!_moveTexture) {
         _moveTexture = std::make_unique<Texture>(
             window,
@@ -596,59 +600,6 @@ void BlockView::renderImpl(Window& window) {
         Rect::zero,
         {handleX, handleY, handleSize, handleSize}
     );
-
-    // Draw the insertion marker in the block's content coordinates. It is
-    // clipped manually to the item viewport so it cannot cover the header.
-    if (expanded && _itemDropIndex && !_itemViews.empty()) {
-        std::size_t slot = std::min(*_itemDropIndex, _itemViews.size());
-        if (_itemDropSourceIndex && slot >= *_itemDropSourceIndex) {
-            ++slot;
-        }
-
-        const bool atEnd = slot >= _itemViews.size();
-        const Rect itemRect = atEnd
-            ? _itemViews.back()->rect()
-            : _itemViews[slot]->rect();
-
-        const float markerContentX = atEnd
-            ? itemRect.origin.x + itemRect.size.x + 2.0f
-            : itemRect.origin.x - 4.0f;
-
-        const Rect viewport = _itemScrollView->rect();
-        const Point scroll = _itemScrollView->scrollPosition();
-
-        if (viewport.size.x >= 3.0f && viewport.size.y > 0.0f) {
-            const float markerX = std::clamp(
-                viewport.origin.x + markerContentX - scroll.x,
-                viewport.origin.x,
-                viewport.origin.x + viewport.size.x - 3.0f
-            );
-            const float requestedY =
-                viewport.origin.y + itemRect.origin.y - scroll.y;
-            const float markerY = std::max(
-                requestedY,
-                viewport.origin.y
-            );
-            const float markerBottom = std::min(
-                requestedY + kItemHeight,
-                viewport.origin.y + viewport.size.y
-            );
-            const float markerHeight = std::max(
-                0.0f,
-                markerBottom - markerY
-            );
-
-            if (markerHeight > 0.0f) {
-                window->setRenderColor({135, 220, 135});
-                window->renderRect({
-                    markerX,
-                    markerY,
-                    3.0f,
-                    markerHeight
-                });
-            }
-        }
-    }
 
     const std::string total = std::to_string(_block.total()) + "kr";
 

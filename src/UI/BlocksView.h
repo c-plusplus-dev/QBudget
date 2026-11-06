@@ -75,6 +75,7 @@ private:
     void updateDrag(QTip::Point position);
     void finishDrag();
     void clearDragIndicators();
+    void animateDragLayout(float dt);
     void rebuildBlockViews();
     void reorderBlock(std::size_t source, std::size_t destination);
     void reorderItem(BlockView& block, std::size_t source, std::size_t destination);
@@ -94,6 +95,8 @@ private:
     MagickButton _addButton;
 
     std::optional<DragState> _drag;
+    QTip::Rect _dragPlaceholder{};
+    bool _hasDragPlaceholder = false;
 };
 
 #endif // QBUDGET_UI_BLOCKSVIEW_H

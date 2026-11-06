@@ -167,11 +167,6 @@ void ItemView::updateLayout() {
     });
 }
 
-void ItemView::renderImpl(Window& window) {
-    if (_dragging) {
-        return;
-    }
-
     if (!_editButtonTexture) {
         _editButtonTexture = std::make_unique<Texture>(
             window,

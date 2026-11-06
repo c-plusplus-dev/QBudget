@@ -235,6 +235,10 @@ void BlockView::rebuildItemViews() {
 }
 
 void BlockView::layoutItemViews() const {
+    if (_manualItemLayout) {
+        return;
+    }
+
     if (!expanded || _itemViews.empty()) {
         _itemScrollView->setContentSize({0.0f, 0.0f});
         return;
@@ -556,11 +560,6 @@ void BlockView::onResize() {
 
     layoutItemViews();
 }
-
-void BlockView::renderImpl(Window& window) {
-    if (_dragging) {
-        return;
-    }
 
     if (!_moveTexture) {
         _moveTexture = std::make_unique<Texture>(

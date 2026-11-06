@@ -561,6 +561,7 @@ void BlockView::onResize() {
     layoutItemViews();
 }
 
+void BlockView::renderImpl(Window& window) {
     if (!_moveTexture) {
         _moveTexture = std::make_unique<Texture>(
             window,

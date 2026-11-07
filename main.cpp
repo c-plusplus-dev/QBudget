@@ -8,6 +8,7 @@
 #include <QTipUIKit/UIKit.h>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
+#include "Helpers.h"
 #include "Storage/Database.h"
 #include "Storage/DatabaseManager.h"
 #include "UI/BlocksView.h"
@@ -54,7 +55,16 @@ void pieViewRenderer(Window& buttonWindow, const Rect& rect) {
 }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+    --argc; // remove name
+    ++argv; // skip name
+    bool dev = false;
+    if (argc >= 1) {
+        if (std::string(argv[0]) == "-dev") {
+            dev = true;
+        }
+    }
+
     ModLoader::load<UIKitMod>();
 
     Window window("QBudget", 800, 600);
@@ -69,7 +79,10 @@ int main() {
     int currentMonth = static_cast<int>(static_cast<unsigned>(date.month()));
     int currentYear = static_cast<int>(date.year());
 
-    DatabaseManager manager{"testDatabase"};
+    auto path = dev ? "testDatabase" : getAppDirectory("io.github.c_plusplus_dev/QBudget");
+    std::filesystem::create_directories(path);
+
+    DatabaseManager manager{path};
     auto& database = manager.getOrCreate(currentYear, currentMonth);
 
     Panel root({0, 0, width, height});

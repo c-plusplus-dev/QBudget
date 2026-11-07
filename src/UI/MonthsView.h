@@ -3,11 +3,13 @@
 
 #include <Q-Tip/QTip.h>
 #include <QTipUIKit/Containers/NavigationView/View.h>
+#include <QTipUIKit/Widgets/Button/Button.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "Storage/DatabaseManager.h"
@@ -58,9 +60,8 @@ private:
     std::vector<int> _years;
     std::array<MonthTile, 12> _tiles{};
 
-    QTip::Rect _previousYearRect{};
-    QTip::Rect _nextYearRect{};
-    QTip::Point _mousePosition{};
+    std::unique_ptr<Button> _previousYearButton;
+    std::unique_ptr<Button> _nextYearButton;
 
     float _refreshTimer = 0.0f;
 };

@@ -1,5 +1,7 @@
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
+#include <string>
 #include <memory>
 #include <vector>
 
@@ -11,12 +13,15 @@
 #include "Helpers.h"
 #include "Storage/Database.h"
 #include "Storage/DatabaseManager.h"
+#include "UI/BarView.h"
 #include "UI/BlocksView.h"
+#include "UI/MonthsView.h"
 #include "UI/PieView.h"
 
 using namespace QTip;
 
 namespace {
+
 ButtonStyle makeNavigationButtonStyle(const Font& font) {
     ButtonStyle style;
     style.color = Color::clear;
@@ -33,16 +38,17 @@ void blocksViewRenderer(Window& buttonWindow, const Rect& rect) {
     const float blockHeight = size / 5.0f;
     const float spacing = (size - 3.0f * blockHeight) / 2.0f;
 
-    Point tl = rect.center() - Point{size / 2.0f, size / 2.0f - 1.25f};
+    Point topLeft = rect.center() -
+        Point{size / 2.0f, size / 2.0f - 1.25f};
 
     buttonWindow->setRenderColor(Color::white);
 
     for (int i = 0; i < 3; ++i) {
         buttonWindow->renderRoundedRect(
-            {tl, size, blockHeight},
+            {topLeft, size, blockHeight},
             5
         );
-        tl.y += blockHeight + spacing;
+        topLeft.y += blockHeight + spacing;
     }
 }
 
@@ -51,18 +57,105 @@ void pieViewRenderer(Window& buttonWindow, const Rect& rect) {
     const float radius = (size - 8.0f) / 2.0f;
     const Point center = rect.center();
 
-    Detail::drawPieSlice(buttonWindow, nullptr, center.x, center.y, radius, 0.75, Color::white, 0);
-}
+    Detail::drawPieSlice(
+        buttonWindow,
+        nullptr,
+        center.x,
+        center.y,
+        radius,
+        0.75,
+        Color::white,
+        0
+    );
 }
 
-int main(int argc, char *argv[]) {
-    --argc; // remove name
-    ++argv; // skip name
-    bool dev = false;
-    if (argc >= 1) {
-        if (std::string(argv[0]) == "-dev") {
-            dev = true;
+void monthsViewRenderer(Window& buttonWindow, const Rect& rect) {
+    const float size = std::min(rect.size.x, rect.size.y) - 8.0f;
+    const Point center = rect.center();
+
+    const Rect calendar{
+        center.x - size * 0.38f,
+        center.y - size * 0.36f,
+        size * 0.76f,
+        size * 0.72f
+    };
+
+    buttonWindow->setRenderColor(Color::white);
+    buttonWindow->renderRoundedRect(calendar, 4);
+
+    buttonWindow->setRenderColor({20, 20, 20});
+    buttonWindow->renderRect({
+        calendar.origin.x + 2.0f,
+        calendar.origin.y + size * 0.18f,
+        calendar.size.x - 4.0f,
+        size * 0.12f
+    });
+
+    const float dotSize = size * 0.09f;
+    for (int row = 0; row < 2; ++row) {
+        for (int column = 0; column < 3; ++column) {
+            buttonWindow->setRenderColor({20, 20, 20});
+            buttonWindow->renderRoundedRect(
+                {
+                    calendar.origin.x + size * (0.18f + 0.2f * column),
+                    calendar.origin.y + size * (0.39f + 0.2f * row),
+                    dotSize,
+                    dotSize
+                },
+                dotSize * 0.5f
+            );
         }
+    }
+}
+
+void barViewRenderer(Window& buttonWindow, const Rect& rect) {
+    const float size = std::min(rect.size.x, rect.size.y) - 8.0f;
+    const Point center = rect.center();
+    const float baseline = center.y + size * 0.34f;
+    const float barWidth = size * 0.16f;
+
+    buttonWindow->setRenderColor(Color::white);
+
+    buttonWindow->renderRoundedRect(
+        {
+            center.x - size * 0.34f,
+            baseline - size * 0.38f,
+            barWidth,
+            size * 0.38f
+        },
+        2
+    );
+
+    buttonWindow->renderRoundedRect(
+        {
+            center.x - barWidth * 0.5f,
+            baseline - size * 0.62f,
+            barWidth,
+            size * 0.62f
+        },
+        2
+    );
+
+    buttonWindow->renderRoundedRect(
+        {
+            center.x + size * 0.18f,
+            baseline - size * 0.48f,
+            barWidth,
+            size * 0.48f
+        },
+        2
+    );
+}
+
+} // namespace
+
+int main(int argc, char* argv[]) {
+    --argc; // Remove the executable name.
+    ++argv; // Skip the executable name.
+
+    bool dev = false;
+    if (argc >= 1 && std::string(argv[0]) == "-dev") {
+        dev = true;
     }
 
     ModLoader::load<UIKitMod>();
@@ -76,56 +169,116 @@ int main(int argc, char *argv[]) {
     const auto today = std::chrono::floor<std::chrono::days>(now);
     const std::chrono::year_month_day date{today};
 
-    int currentMonth = static_cast<int>(static_cast<unsigned>(date.month()));
-    int currentYear = static_cast<int>(date.year());
+    const int currentMonth =
+        static_cast<int>(static_cast<unsigned>(date.month()));
+    const int currentYear = static_cast<int>(date.year());
 
-    auto path = dev ? "testDatabase" : getAppDirectory("io.github.c_plusplus_dev/QBudget");
+    int selectedMonth = currentMonth;
+    int selectedYear = currentYear;
+
+    const auto path = dev
+        ? std::filesystem::path{"testDatabase"}
+        : getAppDirectory("io.github.c_plusplus_dev/QBudget");
+
     std::filesystem::create_directories(path);
 
     DatabaseManager manager{path};
-    auto& database = manager.getOrCreate(currentYear, currentMonth);
+    Database* activeDatabase =
+        &manager.getOrCreate(selectedYear, selectedMonth);
 
-    Panel root({0, 0, width, height});
+    bool rebuildRoot = false;
 
-    auto& navigation = root.add<NavigationView>(
-        Rect{0, 0, width, height},
-        NavigationPosition::Top,
-        30.0f
-    );
+    const ButtonStyle navigationStyle =
+        makeNavigationButtonStyle(font);
 
-    const ButtonStyle navigationStyle = makeNavigationButtonStyle(font);
+    auto buildRoot = [&]() -> std::unique_ptr<Panel> {
+        auto newRoot = std::make_unique<Panel>(
+            Rect{0, 0, width, height}
+        );
 
-    navigation.addView<BlocksView, MagickButton>(
-        [&]() -> std::unique_ptr<BlocksView> {
-            return std::make_unique<BlocksView>(
-                Rect{0, 0, width, height},
-                window,
-                font,
-                database,
-                currentMonth,
-                currentYear
-            );
-        },
-        navigationStyle,
-        blocksViewRenderer
-    );
+        auto& navigation = newRoot->add<NavigationView>(
+            Rect{0, 0, width, height},
+            NavigationPosition::Top,
+            30.0f
+        );
 
-    navigation.addView<PieView, MagickButton>(
-        [&]() -> std::unique_ptr<PieView> {
-            return std::make_unique<PieView>(
-                Rect{0, 0, width, height},
-                database,
-                font
-            );
-        },
-        navigationStyle,
-        pieViewRenderer
-    );
+        navigation.addView<BlocksView, MagickButton>(
+            [&]() -> std::unique_ptr<BlocksView> {
+                return std::make_unique<BlocksView>(
+                    Rect{0, 0, width, height},
+                    window,
+                    font,
+                    *activeDatabase,
+                    selectedMonth,
+                    selectedYear
+                );
+            },
+            navigationStyle,
+            blocksViewRenderer
+        );
+
+        navigation.addView<MonthsView, MagickButton>(
+            [&]() -> std::unique_ptr<MonthsView> {
+                return std::make_unique<MonthsView>(
+                    Rect{0, 0, width, height},
+                    manager,
+                    font,
+                    selectedMonth,
+                    selectedYear,
+                    [&] {
+                        manager.saveAll();
+                        activeDatabase = &manager.getOrCreate(
+                            selectedYear,
+                            selectedMonth
+                        );
+                        rebuildRoot = true;
+                    }
+                );
+            },
+            navigationStyle,
+            monthsViewRenderer
+        );
+
+        navigation.addView<PieView, MagickButton>(
+            [&]() -> std::unique_ptr<PieView> {
+                return std::make_unique<PieView>(
+                    Rect{0, 0, width, height},
+                    *activeDatabase,
+                    font
+                );
+            },
+            navigationStyle,
+            pieViewRenderer
+        );
+
+        navigation.addView<BarView, MagickButton>(
+            [&]() -> std::unique_ptr<BarView> {
+                return std::make_unique<BarView>(
+                    Rect{0, 0, width, height},
+                    manager,
+                    font,
+                    selectedYear
+                );
+            },
+            navigationStyle,
+            barViewRenderer
+        );
+
+        return newRoot;
+    };
+
+    std::unique_ptr<Panel> root = buildRoot();
 
     Point previousWindowSize{-1, -1};
 
     while (!window.shouldClose()) {
         QTipRuntime::fetchEvents();
+
+        if (rebuildRoot) {
+            root = buildRoot();
+            rebuildRoot = false;
+            previousWindowSize = {-1, -1};
+        }
 
         const Point currentWindowSize = window.size();
         if (currentWindowSize != previousWindowSize) {
@@ -133,17 +286,18 @@ int main(int argc, char *argv[]) {
             width = currentWindowSize.x;
             height = currentWindowSize.y;
 
-            root.resize(currentWindowSize);
-            navigation.resize({width, height});
+            root->resize(currentWindowSize);
         }
 
         window->setRenderColor({20, 20, 20});
         window->clear();
 
-        root.render(window);
+        root->render(window);
 
         window->present();
     }
+
+    manager.saveAll();
 
     return 0;
 }

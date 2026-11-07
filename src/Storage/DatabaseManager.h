@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <vector>
 
 class DatabaseManager {
 public:
@@ -17,6 +18,9 @@ public:
     [[nodiscard]] const Database* get(int year, int month) const;
 
     [[nodiscard]] Database& getOrCreate(int year, int month);
+
+    [[nodiscard]] std::vector<int> availableYears() const;
+    [[nodiscard]] std::vector<int> availableMonths(int year) const;
 
     void save(int year, int month);
     void saveAll();

@@ -106,7 +106,7 @@ void BarView::refreshData() {
             continue;
         }
 
-        const std::size_t index = static_cast<std::size_t>(month - 1);
+        const auto index = static_cast<std::size_t>(month - 1);
         databases[index] = database;
         available[index] = true;
 
@@ -284,7 +284,7 @@ void BarView::renderImpl(Window& window) {
         window,
         _font,
         _previousBlockRect,
-        "<",
+        "◀",
         canGoPrevious,
         canGoPrevious && _previousBlockRect.isPointInside(_mousePosition)
     );
@@ -293,7 +293,7 @@ void BarView::renderImpl(Window& window) {
         window,
         _font,
         _nextBlockRect,
-        ">",
+        "▶",
         canGoNext,
         canGoNext && _nextBlockRect.isPointInside(_mousePosition)
     );
@@ -428,7 +428,7 @@ void BarView::renderImpl(Window& window) {
 
             window->renderRoundedRect(
                 {barX, barY, barWidth, barHeight},
-                std::min(5.0f, barWidth * 0.2f)
+                static_cast<int>(std::min(5.0f, barWidth * 0.2f))
             );
 
             const std::string valueLabel =

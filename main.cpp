@@ -97,12 +97,12 @@ void monthsViewRenderer(Window& buttonWindow, const Rect& rect) {
             buttonWindow->setRenderColor({20, 20, 20});
             buttonWindow->renderRoundedRect(
                 {
-                    calendar.origin.x + size * (0.18f + 0.2f * column),
-                    calendar.origin.y + size * (0.39f + 0.2f * row),
+                    calendar.origin.x + size * (0.18f + 0.2f * static_cast<float>(column)),
+                    calendar.origin.y + size * (0.39f + 0.2f * static_cast<float>(row)),
                     dotSize,
                     dotSize
                 },
-                dotSize * 0.5f
+                static_cast<int>(dotSize * 0.5f)
             );
         }
     }
@@ -191,6 +191,7 @@ int main(int argc, char* argv[]) {
     const ButtonStyle navigationStyle =
         makeNavigationButtonStyle(font);
 
+    NavigationView* nav = nullptr;
     auto buildRoot = [&]() -> std::unique_ptr<Panel> {
         auto newRoot = std::make_unique<Panel>(
             Rect{0, 0, width, height}
@@ -264,6 +265,8 @@ int main(int argc, char* argv[]) {
             barViewRenderer
         );
 
+        nav = &navigation;
+
         return newRoot;
     };
 
@@ -278,6 +281,9 @@ int main(int argc, char* argv[]) {
             root = buildRoot();
             rebuildRoot = false;
             previousWindowSize = {-1, -1};
+            if (nav) {
+                nav->select(1);
+            }
         }
 
         const Point currentWindowSize = window.size();

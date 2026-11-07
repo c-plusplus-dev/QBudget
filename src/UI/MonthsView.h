@@ -47,7 +47,7 @@ private:
     void refreshData();
     void layout();
     void selectYear(int direction);
-    void selectMonth(int month);
+    void selectMonth(int month) const;
 
     DatabaseManager& _manager;
     QTip::Font& _font;

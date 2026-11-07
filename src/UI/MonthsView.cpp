@@ -198,6 +198,12 @@ void MonthsView::selectMonth(const int month) const {
 }
 
 bool MonthsView::handleEvent(const Event& event) {
+    if ((event.type == EventType::MouseButtonPressed ||
+         event.type == EventType::MouseButtonReleased) &&
+        event.mouseButton.button != MouseButton::Left) {
+        return true;
+    }
+
     const auto yearIt = std::ranges::find(_years, _selectedYear);
     const bool canGoPrevious =
         yearIt != _years.end() && yearIt != _years.begin();

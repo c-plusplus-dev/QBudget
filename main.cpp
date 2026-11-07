@@ -298,6 +298,13 @@ int main(int argc, char* argv[]) {
             height = currentWindowSize.y;
 
             root->resize(currentWindowSize);
+
+            // Panel::resize() only resizes its own render target; it does not
+            // propagate the new size to child objects. Resize NavigationView
+            // explicitly so it can relayout its active view and navigation bar.
+            if (nav) {
+                nav->resize(currentWindowSize);
+            }
         }
 
         window->setRenderColor({20, 20, 20});

@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <ranges>
 #include <string>
+#include <unordered_map>
 #include <utility>
 
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
@@ -67,6 +68,7 @@ BlocksView::BlocksView(
     const Rect rect,
     Window& window,
     Font& font,
+    const std::filesystem::path& assetDirectory,
     Database& database,
     int currentMonth,
     int currentYear
@@ -93,6 +95,10 @@ BlocksView::BlocksView(
     _rect = rect;
     _preferredRect = rect;
     _window = &window;
+
+    _textures.blockMove = std::make_unique<Texture>(window, assetDirectory / "drag1.png");
+    _textures.itemMove = std::make_unique<Texture>(window, assetDirectory / "drag2.png");
+    _textures.editButton = std::make_unique<Texture>(window, assetDirectory / "edit.png");
 
     _blockList = &_scrollView.add<List>(
         Rect{0, 0, nonNegative(rect.size.x), 100}
@@ -147,6 +153,8 @@ void BlocksView::addBlockView(Block& block, bool moveSpacer) {
         },
         block,
         _font,
+        _textures,
+        _scrollView,
         [this](BlockView& view) {
             handleExpansion(view);
         },
@@ -629,23 +637,19 @@ void BlocksView::reorderBlock(
         );
     }
 
+    _database.markChanged();
     rebuildBlockViews();
 }
 
 void BlocksView::rebuildBlockViews() {
-    struct SavedBlockState {
-        Block* block;
-        BlockView::State state;
-    };
-
-    std::vector<SavedBlockState> savedStates;
+    std::unordered_map<Block*, BlockView::State> savedStates;
     savedStates.reserve(_blocks.size());
 
     for (BlockView* blockView : _blocks) {
-        savedStates.push_back({
+        savedStates.emplace(
             &blockView->block(),
             blockView->saveState()
-        });
+        );
     }
 
     const Point previousScroll = _scrollView.scrollPosition();
@@ -660,31 +664,19 @@ void BlocksView::rebuildBlockViews() {
     createBlockViews();
 
     for (BlockView* blockView : _blocks) {
-        const auto state = std::ranges::find_if(
-            savedStates,
-            [blockView](const SavedBlockState& entry) {
-                return entry.block == &blockView->block();
-            }
-        );
-
-        if (state != savedStates.end()) {
-            blockView->setExpanded(state->state.expanded);
+        if (const auto state = savedStates.find(&blockView->block());
+            state != savedStates.end()) {
+            blockView->setExpanded(state->second.expanded);
         }
     }
 
     updateLayout();
 
     for (BlockView* blockView : _blocks) {
-        const auto state = std::ranges::find_if(
-            savedStates,
-            [blockView](const SavedBlockState& entry) {
-                return entry.block == &blockView->block();
-            }
-        );
-
-        if (state != savedStates.end()) {
+        if (const auto state = savedStates.find(&blockView->block());
+            state != savedStates.end()) {
             blockView->restoreItemScrollPosition(
-                state->state.itemScrollPosition
+                state->second.itemScrollPosition
             );
         }
     }
@@ -831,16 +823,24 @@ void BlocksView::renderImpl(Window& window) {
         10
     });
 
-    const std::string totalText = fmt(
-        "Total: %" PRId64 "kr | Date: %d-%02d",
-        _database.total(),
-        _currentYear,
-        _currentMonth
-    );
+    const std::uint64_t databaseRevision = _database.revision();
+    if (_cachedDatabaseRevision != databaseRevision ||
+        _cachedTotalMonth != _currentMonth ||
+        _cachedTotalYear != _currentYear) {
+        _cachedTotalText = fmt(
+            "Total: %" PRId64 "kr | Date: %d-%02d",
+            _database.total(),
+            _currentYear,
+            _currentMonth
+        );
+        _cachedDatabaseRevision = databaseRevision;
+        _cachedTotalMonth = _currentMonth;
+        _cachedTotalYear = _currentYear;
+    }
 
     window->renderText(
         _font,
-        totalText.c_str(),
+        _cachedTotalText.c_str(),
         _rect.origin.x + 5.0f,
         _rect.origin.y + _rect.size.y - 22.0f,
         Color::white

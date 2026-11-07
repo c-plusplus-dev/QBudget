@@ -49,6 +49,49 @@ void readAndValidateMagic(Reader& reader) {
 
 } // namespace
 
+Database::Database(Database&& other) noexcept
+    : _blocks(std::move(other._blocks)),
+      _revision(other._revision),
+      _cachedTotal(other._cachedTotal),
+      _cachedRevision(other._cachedRevision),
+      _totalDirty(other._totalDirty) {
+    for (auto& block : _blocks) {
+        if (block) {
+            block->_parent = this;
+        }
+    }
+
+    other._revision = 0;
+    other._cachedTotal = 0;
+    other._cachedRevision = 0;
+    other._totalDirty = true;
+}
+
+Database& Database::operator=(Database&& other) noexcept {
+    if (this == &other) {
+        return *this;
+    }
+
+    _blocks = std::move(other._blocks);
+    _revision = other._revision;
+    _cachedTotal = other._cachedTotal;
+    _cachedRevision = other._cachedRevision;
+    _totalDirty = other._totalDirty;
+
+    for (auto& block : _blocks) {
+        if (block) {
+            block->_parent = this;
+        }
+    }
+
+    other._revision = 0;
+    other._cachedTotal = 0;
+    other._cachedRevision = 0;
+    other._totalDirty = true;
+
+    return *this;
+}
+
 std::vector<std::unique_ptr<Block>>& Database::blocks() noexcept {
     return _blocks;
 }
@@ -59,6 +102,7 @@ const std::vector<std::unique_ptr<Block>>& Database::blocks() const noexcept {
 
 std::unique_ptr<Block>& Database::addBlock(Block block) {
     _blocks.push_back(std::make_unique<Block>(std::move(block)));
+    _blocks.back()->_parent = this;
     markChanged();
     return _blocks.back();
 }
@@ -66,6 +110,12 @@ std::unique_ptr<Block>& Database::addBlock(Block block) {
 void Database::clear() noexcept {
     if (_blocks.empty()) {
         return;
+    }
+
+    for (auto& block : _blocks) {
+        if (block) {
+            block->_parent = nullptr;
+        }
     }
 
     _blocks.clear();
@@ -84,6 +134,7 @@ void Database::remove(Block& block) {
         return;
     }
 
+    (*it)->_parent = nullptr;
     _blocks.erase(it);
     markChanged();
 }
@@ -117,6 +168,9 @@ void Database::save(const std::filesystem::path& path) const {
     writer.write64(static_cast<std::uint64_t>(_blocks.size()));
 
     for (const auto& block : _blocks) {
+        if (!block) {
+            throw std::logic_error("Cannot serialize a null block");
+        }
         block->writeTo(writer);
     }
 
@@ -124,7 +178,8 @@ void Database::save(const std::filesystem::path& path) const {
 }
 
 std::int64_t Database::total() const {
-    if (!_totalDirty) {
+    const std::uint64_t currentRevision = revision();
+    if (!_totalDirty && _cachedRevision == currentRevision) {
         return _cachedTotal;
     }
 
@@ -136,6 +191,7 @@ std::int64_t Database::total() const {
     }
 
     _cachedTotal = result;
+    _cachedRevision = currentRevision;
     _totalDirty = false;
     return result;
 }
@@ -180,9 +236,9 @@ Database Database::load(const std::filesystem::path& path) {
     database._blocks.reserve(static_cast<std::size_t>(blockCount));
 
     for (std::uint64_t i = 0; i < blockCount; ++i) {
-        database._blocks.push_back(
-            std::make_unique<Block>(Block::readFrom(reader))
-        );
+        auto block = std::make_unique<Block>(Block::readFrom(reader));
+        block->_parent = &database;
+        database._blocks.push_back(std::move(block));
     }
 
     if (!reader.atEnd()) {

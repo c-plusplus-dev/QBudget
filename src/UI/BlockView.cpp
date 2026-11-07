@@ -4,6 +4,7 @@
 //
 
 #include "BlockView.h"
+#include "UI/Visibility.h"
 
 #include <algorithm>
 #include <cmath>
@@ -68,11 +69,15 @@ BlockView::BlockView(
     Rect rect,
     Block& block,
     Font& font,
+    UITextures& textures,
+    ScrollView& parentScrollView,
     Action expandRequested,
     Action deleteRequested,
     Action addRequested
 )
     : _block(block),
+      _textures(textures),
+      _parentScrollView(parentScrollView),
       _expandRequested(std::move(expandRequested)),
       _deleteRequested(std::move(deleteRequested)),
       _addRequested(std::move(addRequested)),
@@ -209,7 +214,6 @@ bool BlockView::handleEvent(const Event& event) {
 
     if (expanded) {
         processDeletions();
-        syncItemViews();
 
         if (!_add->handleEvent(event)) {
             return false;
@@ -226,6 +230,11 @@ bool BlockView::handleEvent(const Event& event) {
 }
 
 void BlockView::tick(Clock& clock, const double dt) {
+    // Collapsed blocks have no active item viewport to animate.
+    if (!expanded && (!_itemDrag || !_itemDrag->moved)) {
+        return;
+    }
+
     _itemScrollView->tick(clock, dt);
 
     if (!_itemDrag || !_itemDrag->moved) {
@@ -541,7 +550,11 @@ void BlockView::finishItemDrag() {
     updateItemDrag(_itemDrag->pointerPosition);
     const ItemDragState drag = *_itemDrag;
 
-    clearItemDragIndicators();
+    _hasItemDragPlaceholder = false;
+    _manualItemLayout = false;
+    for (ItemView* itemView : _itemViews) {
+        itemView->setZIndex(0);
+    }
     _itemDrag.reset();
 
     auto& items = _block.items;
@@ -549,6 +562,7 @@ void BlockView::finishItemDrag() {
         drag.sourceIndex >= items.size() ||
         drag.dropIndex >= items.size() ||
         drag.sourceIndex == drag.dropIndex) {
+        layoutItemViews();
         return;
     }
 
@@ -558,15 +572,26 @@ void BlockView::finishItemDrag() {
             items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
             items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1)
         );
+        std::rotate(
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.dropIndex),
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1)
+        );
     } else {
         std::rotate(
             items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
             items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1),
             items.begin() + static_cast<std::ptrdiff_t>(drag.dropIndex + 1)
         );
+        std::rotate(
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1),
+            _itemViews.begin() + static_cast<std::ptrdiff_t>(drag.dropIndex + 1)
+        );
     }
 
-    rebuildItemViews();
+    _block.markChanged();
+    layoutItemViews();
 }
 
 void BlockView::animateItemDragLayout(const float dt) {
@@ -656,11 +681,28 @@ void BlockView::reposition(Point position) {
 }
 
 void BlockView::setRect(Rect rect) {
+    const Point delta = rect.origin - _rect.origin;
+    const bool sizeChanged =
+        rect.size.x != _rect.size.x || rect.size.y != _rect.size.y;
+
     _rect = rect;
     _preferredRect = rect;
 
-    syncItemViews();
-    onResize();
+    if (sizeChanged) {
+        syncItemViews();
+        onResize();
+        return;
+    }
+
+    if (delta.x == 0.0f && delta.y == 0.0f) {
+        return;
+    }
+
+    // Repositioning a dragged block should not relayout every item.
+    _expand->reposition(_expand->rect().origin + delta);
+    _delete->reposition(_delete->rect().origin + delta);
+    _add->reposition(_add->rect().origin + delta);
+    _itemScrollView->reposition(_itemScrollView->rect().origin + delta);
 }
 
 const Rect& BlockView::rect() {
@@ -724,10 +766,15 @@ void BlockView::layoutItemViews() const {
             ++rows;
         }
 
-        itemView->setRect({
-            {x, y},
-            {itemWidth, kItemHeight}
-        });
+        const Rect itemRect{{x, y}, {itemWidth, kItemHeight}};
+        const Rect& currentRect = itemView->rect();
+
+        if (currentRect.origin.x != itemRect.origin.x ||
+            currentRect.origin.y != itemRect.origin.y ||
+            currentRect.size.x != itemRect.size.x ||
+            currentRect.size.y != itemRect.size.y) {
+            itemView->setRect(itemRect);
+        }
 
         x += itemWidth + kItemSpacing;
     }
@@ -817,6 +864,9 @@ void BlockView::onEdit(ItemView& itemView) {
 
         item.name = nameTextbox.getText();
         item.cost = cost;
+        _block.markChanged();
+        itemView.updateLayout();
+        layoutItemViews();
         dialog.close();
     });
 }
@@ -955,8 +1005,15 @@ void BlockView::onAddItem() {
             std::cout << "Cost must be a number" << std::endl;
             return;
         }
-        _block.items.push_back(std::make_unique<Block::Item>(nameTextbox.getText(), cost));
+        auto item = std::make_unique<Block::Item>(
+            nameTextbox.getText(),
+            cost
+        );
+        item->parent = &_block;
+        _block.items.push_back(std::move(item));
+        _block.markChanged();
         addItem(*_block.items.back());
+        layoutItemViews();
         dialog.close();
     });
 }
@@ -966,6 +1023,8 @@ ItemView& BlockView::addItem(Block::Item& item) {
         Rect{0, 0, 100, kItemHeight},
         item,
         _font,
+        _textures,
+        *_itemScrollView,
         [this] (ItemView& item) {
             onEdit(item);
         },
@@ -980,6 +1039,8 @@ ItemView& BlockView::addItem(Block::Item& item) {
 }
 
 void BlockView::processDeletions() {
+    bool changed = false;
+
     for (auto item : _itemsToDelete) {
         const auto it = std::ranges::find(_itemViews, item);
         if (it == _itemViews.end()) {
@@ -992,9 +1053,14 @@ void BlockView::processDeletions() {
         _itemScrollView->remove(*item);
         _block.remove(model);
         _itemViews.erase(it);
+        changed = true;
     }
 
     _itemsToDelete.clear();
+
+    if (changed) {
+        layoutItemViews();
+    }
 }
 
 void BlockView::onResize() {
@@ -1026,11 +1092,8 @@ void BlockView::onResize() {
 }
 
 void BlockView::renderImpl(Window& window) {
-    if (!_moveTexture) {
-        _moveTexture = std::make_unique<Texture>(
-            window,
-            "assets/drag1.png"
-        );
+    if (!isVisibleInScrollView(_rect, _parentScrollView)) {
+        return;
     }
 
     window->setRenderColor({30, 30, 30});
@@ -1049,8 +1112,6 @@ void BlockView::renderImpl(Window& window) {
     if (expanded) {
         _add->render(window);
 
-        syncItemViews();
-
         if (_itemDrag && _itemDrag->moved && _hasItemDragPlaceholder) {
             window->setRenderColor({12, 12, 12});
             window->renderRoundedRect(_itemDragPlaceholder, 10);
@@ -1065,17 +1126,23 @@ void BlockView::renderImpl(Window& window) {
     const float handleSize = 24.0f;
     const float handleX = _rect.origin.x + _rect.size.x - handleSize - 5.0f;
     const float handleY = _rect.origin.y + _rect.size.y - handleSize - 5.0f;
-    window->renderTexture(
-        *_moveTexture,
-        Rect::zero,
-        {handleX, handleY, handleSize, handleSize}
-    );
+    if (_textures.blockMove && _textures.blockMove->isValid()) {
+        window->renderTexture(
+            *_textures.blockMove,
+            Rect::zero,
+            {handleX, handleY, handleSize, handleSize}
+        );
+    }
 
-    const std::string total = std::to_string(_block.total()) + "kr";
+    const std::uint64_t revision = _block.revision();
+    if (_cachedTotalRevision != revision) {
+        _cachedTotalText = std::to_string(_block.total()) + "kr";
+        _cachedTotalRevision = revision;
+    }
 
     window->renderText(
         _font,
-        total.c_str(),
+        _cachedTotalText.c_str(),
         _rect.origin.x + 10.0f,
         _rect.origin.y + _rect.size.y - 26.0f,
         Color::white

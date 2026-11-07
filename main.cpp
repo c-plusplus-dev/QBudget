@@ -11,6 +11,7 @@
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
 #include "Helpers.h"
+#include "Platform.h"
 #include "Storage/Database.h"
 #include "Storage/DatabaseManager.h"
 #include "UI/BarView.h"
@@ -150,6 +151,9 @@ void barViewRenderer(Window& buttonWindow, const Rect& rect) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+    const std::filesystem::path assetDirectory =
+        getExecutableDirectory(argc, argv) / "assets";
+
     --argc; // Remove the executable name.
     ++argv; // Skip the executable name.
 
@@ -163,7 +167,7 @@ int main(int argc, char* argv[]) {
     Window window("QBudget", 800, 600);
     auto [width, height] = window.size();
 
-    Font font("assets/JetBrainsMono-Regular.ttf", 16);
+    Font font(assetDirectory / "JetBrainsMono-Regular.ttf", 16);
 
     const auto now = std::chrono::system_clock::now();
     const auto today = std::chrono::floor<std::chrono::days>(now);
@@ -209,6 +213,7 @@ int main(int argc, char* argv[]) {
                     Rect{0, 0, width, height},
                     window,
                     font,
+                    assetDirectory,
                     *activeDatabase,
                     selectedMonth,
                     selectedYear

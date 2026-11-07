@@ -1,12 +1,15 @@
 #include "UI/BarView.h"
 
-#include "Helpers.h"
 #include "UI/MonthPalette.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cmath>
+#include <memory>
 #include <string>
+#include <unordered_set>
 #include <utility>
 
 using namespace QTip;
@@ -14,18 +17,8 @@ using namespace QTip;
 namespace {
 
 constexpr float kPadding = 12.0f;
-
-std::string compactValue(const std::int64_t value) {
-    if (value >= 1'000'000) {
-        return std::to_string(value / 1'000'000) + "m";
-    }
-
-    if (value >= 10'000) {
-        return std::to_string(value / 1'000) + "k";
-    }
-
-    return std::to_string(value);
-}
+constexpr float kHeaderHeight = 66.0f;
+constexpr float kBottomPadding = 12.0f;
 
 ButtonStyle makeBlockButtonStyle(const Font& font) {
     return {
@@ -52,14 +45,10 @@ BarView::BarView(
     const ButtonStyle buttonStyle = makeBlockButtonStyle(_font);
 
     _previousBlockButton = std::make_unique<Button>(
-        Rect{},
-        "◀",
-        buttonStyle
+        Rect{}, "◀", buttonStyle
     );
     _nextBlockButton = std::make_unique<Button>(
-        Rect{},
-        "▶",
-        buttonStyle
+        Rect{}, "▶", buttonStyle
     );
 
     _previousBlockButton->setOnClick([this] {
@@ -68,6 +57,31 @@ BarView::BarView(
     _nextBlockButton->setOnClick([this] {
         selectBlock(1);
     });
+
+    _chart = std::make_unique<BarChart<MonthBar>>(
+        Rect{},
+        std::vector<BarChartItem<MonthBar>>{},
+        true
+    );
+    _chart->parent = this;
+    _chart->setTooltipRenderer(
+        [](Window& window,
+           Font font,
+           MonthBar& month,
+           double,
+           const std::uint8_t alpha) {
+            const Color color{255, 255, 255, alpha};
+            const std::string monthName{
+                MonthPalette::names[static_cast<std::size_t>(month.month - 1)]
+            };
+            const std::string amount = month.hasBlock
+                ? std::to_string(month.amount) + " kr"
+                : "No entry";
+
+            window->renderText(font, monthName.c_str(), 5.0f, 5.0f, color);
+            window->renderText(font, amount.c_str(), 5.0f, 25.0f, color);
+        }
+    );
 
     _rect = rect;
     _preferredRect = rect;
@@ -78,6 +92,7 @@ BarView::BarView(
 
 void BarView::layout() {
     const float width = std::max(0.0f, _rect.size.x);
+    const float height = std::max(0.0f, _rect.size.y);
 
     _previousBlockButton->setRect({
         _rect.origin.x + kPadding,
@@ -92,6 +107,37 @@ void BarView::layout() {
         32.0f,
         32.0f
     });
+
+    _chartRect = {
+        _rect.origin.x + kPadding,
+        _rect.origin.y + kHeaderHeight,
+        std::max(0.0f, width - 2.0f * kPadding),
+        std::max(0.0f, height - kHeaderHeight - kBottomPadding)
+    };
+
+    _chart->setRect({
+        0.0f,
+        0.0f,
+        _chartRect.size.x,
+        _chartRect.size.y
+    });
+
+    _chartCache.reset();
+    _chartDirty = true;
+}
+
+void BarView::updateNavigationButtons() {
+    const auto current = std::ranges::find(_blockNames, _selectedBlock);
+    const bool hasSelection = current != _blockNames.end();
+    const auto index = hasSelection
+        ? current - _blockNames.begin()
+        : std::ptrdiff_t{0};
+
+    _previousBlockButton->setDisabled(!hasSelection || index == 0);
+    _nextBlockButton->setDisabled(
+        !hasSelection ||
+        index + 1 >= static_cast<std::ptrdiff_t>(_blockNames.size())
+    );
 }
 
 void BarView::refreshData() {
@@ -100,8 +146,12 @@ void BarView::refreshData() {
     std::array<Database*, 12> databases{};
     std::array<bool, 12> available{};
     std::vector<std::string> names;
+    std::unordered_set<std::string> seenNames;
 
-    for (const int month : _manager.availableMonths(year)) {
+    const std::vector<int> months = _manager.availableMonths(year);
+    seenNames.reserve(months.size() * 4);
+
+    for (const int month : months) {
         if (month < 1 || month > 12) {
             continue;
         }
@@ -116,16 +166,12 @@ void BarView::refreshData() {
         available[index] = true;
 
         for (const auto& block : database->blocks()) {
-            if (block->name.empty() ||
-                std::ranges::find(names, block->name) != names.end()) {
-                continue;
+            if (block && !block->name.empty() &&
+                seenNames.insert(block->name).second) {
+                names.push_back(block->name);
             }
-
-            names.push_back(block->name);
         }
     }
-
-    const std::string previousSelection = _selectedBlock;
 
     if (std::ranges::find(names, _selectedBlock) == names.end()) {
         _selectedBlock = names.empty() ? std::string{} : names.front();
@@ -144,7 +190,7 @@ void BarView::refreshData() {
             const auto block = std::ranges::find_if(
                 database->blocks(),
                 [this](const std::unique_ptr<Block>& candidate) {
-                    return candidate->name == _selectedBlock;
+                    return candidate && candidate->name == _selectedBlock;
                 }
             );
 
@@ -158,20 +204,53 @@ void BarView::refreshData() {
     const bool changed =
         _cachedYear != year ||
         _blockNames != names ||
-        _selectedBlock != previousSelection ||
+        _cachedSelection != _selectedBlock ||
         _values != values ||
         _availableMonths != available ||
         _hasBlock != hasBlock;
 
     _blockNames = std::move(names);
+    _titleText = _selectedBlock.empty() ? "No blocks found" : _selectedBlock;
+    _yearText = "Year: " + std::to_string(year);
     _values = values;
     _availableMonths = available;
     _hasBlock = hasBlock;
     _cachedYear = year;
+    _cachedSelection = _selectedBlock;
+    _cachedManagerRevision = _manager.revision();
 
-    if (changed) {
-        _barProgress = 0.0f;
+    if (!changed) {
+        updateNavigationButtons();
+        return;
     }
+
+    std::vector<BarChartItem<MonthBar>> chartItems;
+    chartItems.reserve(12);
+
+    for (std::size_t index = 0; index < 12; ++index) {
+        const int month = static_cast<int>(index) + 1;
+        const bool monthAvailable = _availableMonths[index];
+        const bool hasSelectedBlock = _hasBlock[index];
+
+        chartItems.push_back({
+            MonthBar{
+                month,
+                _values[index],
+                monthAvailable,
+                hasSelectedBlock
+            },
+            static_cast<double>(_values[index]),
+            std::string{MonthPalette::abbreviations[index]},
+            monthAvailable
+                ? MonthPalette::color(month)
+                : Color{75, 75, 75}
+        });
+    }
+
+    _chart->setData(std::move(chartItems));
+    _chartAnimationRemaining = 1.8f;
+    _chartDirty = true;
+    updateNavigationButtons();
 }
 
 void BarView::selectBlock(const int direction) {
@@ -199,24 +278,59 @@ void BarView::selectBlock(const int direction) {
 }
 
 bool BarView::handleEvent(const Event& event) {
+    Event chartEvent = event;
+    bool hasPointerPosition = false;
+
+    switch (event.type) {
+    case EventType::MouseMoved:
+        chartEvent.mouseMove.position =
+            event.mouseMove.position - _chartRect.origin;
+        hasPointerPosition = true;
+        break;
+
+    case EventType::MouseButtonPressed:
+    case EventType::MouseButtonReleased:
+        chartEvent.mouseButton.position =
+            event.mouseButton.position - _chartRect.origin;
+        hasPointerPosition = true;
+        break;
+
+    case EventType::MouseScrolled:
+        chartEvent.mouseScroll.position =
+            event.mouseScroll.position - _chartRect.origin;
+        hasPointerPosition = true;
+        break;
+
+    default:
+        break;
+    }
+
+    const auto handleChartEvent = [&] {
+        const std::size_t previousHovered = _chart->hoveredIndex();
+        const bool propagate = _chart->handleEvent(chartEvent);
+        const std::size_t currentHovered = _chart->hoveredIndex();
+
+        if (currentHovered != previousHovered) {
+            _chartAnimationRemaining = 0.8f;
+            _chartDirty = true;
+        }
+
+        if (hasPointerPosition &&
+            (previousHovered != static_cast<std::size_t>(-1) ||
+             currentHovered != static_cast<std::size_t>(-1))) {
+            _chartDirty = true;
+        }
+
+        return propagate;
+    };
+
     if ((event.type == EventType::MouseButtonPressed ||
          event.type == EventType::MouseButtonReleased) &&
         event.mouseButton.button != MouseButton::Left) {
-        return true;
+        return handleChartEvent();
     }
 
-    const auto current = std::ranges::find(_blockNames, _selectedBlock);
-    const bool hasSelection = current != _blockNames.end();
-    const auto index = hasSelection
-        ? current - _blockNames.begin()
-        : std::ptrdiff_t{0};
-
-    const bool canGoPrevious = hasSelection && index > 0;
-    const bool canGoNext = hasSelection &&
-        index + 1 < static_cast<std::ptrdiff_t>(_blockNames.size());
-
-    _previousBlockButton->setDisabled(!canGoPrevious);
-    _nextBlockButton->setDisabled(!canGoNext);
+    updateNavigationButtons();
 
     if (!_previousBlockButton->handleEvent(event)) {
         return false;
@@ -226,20 +340,22 @@ bool BarView::handleEvent(const Event& event) {
         return false;
     }
 
-    return true;
+    return handleChartEvent();
 }
 
-void BarView::tick(Clock&, const double dt) {
-    const float safeDt = static_cast<float>(
-        std::clamp(dt, 0.0, 0.05)
-    );
+void BarView::tick(Clock& clock, const double dt) {
+    if (_chartAnimationRemaining > 0.0f) {
+        const float safeDt = static_cast<float>(std::clamp(dt, 0.0, 0.1));
+        _chart->tick(clock, safeDt);
+        _chartAnimationRemaining = std::max(
+            0.0f,
+            _chartAnimationRemaining - safeDt
+        );
+        _chartDirty = true;
+    }
 
-    _barProgress += (1.0f - _barProgress) *
-        (1.0f - std::exp(-10.0f * safeDt));
-
-    _refreshTimer += safeDt;
-    if (_refreshTimer >= 0.5f) {
-        _refreshTimer = 0.0f;
+    if (_cachedYear != _selectedYear ||
+        _cachedManagerRevision != _manager.revision()) {
         refreshData();
     }
 }
@@ -271,186 +387,92 @@ const Rect& BarView::rect() {
 }
 
 void BarView::renderImpl(Window& window) {
-    const auto current = std::ranges::find(_blockNames, _selectedBlock);
-    const bool hasSelection = current != _blockNames.end();
-    const auto index = hasSelection
-        ? current - _blockNames.begin()
-        : std::ptrdiff_t{0};
-
-    const bool canGoPrevious = hasSelection && index > 0;
-    const bool canGoNext = hasSelection &&
-        index + 1 < static_cast<std::ptrdiff_t>(_blockNames.size());
-
-    _previousBlockButton->setDisabled(!canGoPrevious);
-    _nextBlockButton->setDisabled(!canGoNext);
+    updateNavigationButtons();
 
     _previousBlockButton->render(window);
     _nextBlockButton->render(window);
 
-    const std::string title = hasSelection
-        ? _selectedBlock
-        : "No blocks found";
-
-    const float titleWidth = static_cast<float>(title.size()) * 9.6f;
+    const bool hasSelection = !_selectedBlock.empty();
+    const float titleWidth = _font.getTextWidth(_titleText);
     window->renderText(
         _font,
-        title.c_str(),
+        _titleText.c_str(),
         _rect.origin.x + (_rect.size.x - titleWidth) * 0.5f,
         _rect.origin.y + 11.0f,
         hasSelection ? Color::white : Color{150, 150, 150}
     );
 
-    const std::string yearText = "Year: " + std::to_string(_selectedYear);
-    const float yearWidth = static_cast<float>(yearText.size()) * 9.6f;
+    const float yearWidth = _font.getTextWidth(_yearText);
 
     window->renderText(
         _font,
-        yearText.c_str(),
+        _yearText.c_str(),
         _rect.origin.x + (_rect.size.x - yearWidth) * 0.5f,
         _rect.origin.y + 35.0f,
         Color{160, 160, 160}
     );
 
-    const Rect chartRect{
-        _rect.origin.x + kPadding,
-        _rect.origin.y + 66.0f,
-        std::max(0.0f, _rect.size.x - 2.0f * kPadding),
-        std::max(0.0f, _rect.size.y - 78.0f)
-    };
-
+    const Rect chartRect = _chartRect;
     window->setRenderColor({28, 28, 28});
     window->renderRoundedRect(chartRect, 10);
 
-    if (!hasSelection || chartRect.size.x < 100.0f ||
-        chartRect.size.y < 100.0f) {
-        const std::string message = hasSelection
-            ? "Window is too small to display the chart"
-            : "Create blocks in this year to compare them here";
-
-        const float messageWidth =
-            static_cast<float>(message.size()) * 9.6f;
-
+    if (chartRect.size.x < 100.0f || chartRect.size.y < 100.0f) {
         window->renderText(
             _font,
-            message.c_str(),
-            chartRect.origin.x +
-                (chartRect.size.x - messageWidth) * 0.5f,
+            "Window is too small to display the chart",
+            chartRect.origin.x + 12.0f,
             chartRect.origin.y + chartRect.size.y * 0.5f,
             Color{145, 145, 145}
         );
         return;
     }
 
-    constexpr float leftInset = 60.0f;
-    constexpr float rightInset = 12.0f;
-    constexpr float topInset = 28.0f;
-    constexpr float bottomInset = 42.0f;
-
-    const float plotLeft = chartRect.origin.x + leftInset;
-    const float plotRight = chartRect.origin.x +
-        chartRect.size.x - rightInset;
-    const float plotTop = chartRect.origin.y + topInset;
-    const float plotBottom = chartRect.origin.y +
-        chartRect.size.y - bottomInset;
-
-    const float plotWidth = std::max(1.0f, plotRight - plotLeft);
-    const float plotHeight = std::max(1.0f, plotBottom - plotTop);
-
-    std::int64_t maximum = 0;
-    for (const std::int64_t value : _values) {
-        maximum = std::max(maximum, value);
-    }
-    maximum = std::max<std::int64_t>(maximum, 1);
-
-    for (int line = 0; line <= 4; ++line) {
-        const float ratio = static_cast<float>(line) / 4.0f;
-        const float y = plotBottom - ratio * plotHeight;
-
-        window->setRenderColor({65, 65, 65});
-        DrawThickLineHV(
-            window,
-            plotLeft,
-            y,
-            plotRight,
-            y,
-            line == 0 ? 2.0f : 1.0f
-        );
-
-        const auto labelValue = static_cast<std::int64_t>(
-            static_cast<double>(maximum) * ratio
-        );
-        const std::string label = compactValue(labelValue);
-
+    if (!hasSelection) {
         window->renderText(
             _font,
-            label.c_str(),
-            chartRect.origin.x + 8.0f,
-            y - 8.0f,
-            Color{150, 150, 150}
+            "Create blocks in this year to compare them here",
+            chartRect.origin.x + 12.0f,
+            chartRect.origin.y + chartRect.size.y * 0.5f,
+            Color{145, 145, 145}
         );
+        return;
     }
 
-    const float columnWidth = plotWidth / 12.0f;
-    const float barWidth = std::max(
-        3.0f,
-        std::min(34.0f, columnWidth * 0.62f)
+    const int cacheWidth = std::max(
+        1,
+        static_cast<int>(std::ceil(chartRect.size.x))
+    );
+    const int cacheHeight = std::max(
+        1,
+        static_cast<int>(std::ceil(chartRect.size.y))
     );
 
-    for (std::size_t month = 0; month < 12; ++month) {
-        const float columnX =
-            plotLeft + static_cast<float>(month) * columnWidth;
-        const float value = static_cast<float>(
-            static_cast<double>(std::max<std::int64_t>(0, _values[month])) /
-            static_cast<double>(maximum)
+    if (!_chartCache ||
+        _chartCache->size().x != static_cast<float>(cacheWidth) ||
+        _chartCache->size().y != static_cast<float>(cacheHeight)) {
+        _chartCache = std::make_unique<RenderTexture>(
+            window,
+            cacheWidth,
+            cacheHeight
         );
-        const float barHeight =
-            value * plotHeight * std::clamp(_barProgress, 0.0f, 1.0f);
-
-        const float barX = columnX + (columnWidth - barWidth) * 0.5f;
-        const float barY = plotBottom - barHeight;
-
-        if (_availableMonths[month] && _hasBlock[month] &&
-            barHeight > 0.5f) {
-            window->setRenderColor(
-                MonthPalette::color(static_cast<int>(month) + 1)
-            );
-
-            window->renderRoundedRect(
-                {barX, barY, barWidth, barHeight},
-                static_cast<int>(std::min(5.0f, barWidth * 0.2f))
-            );
-
-            const std::string valueLabel =
-                compactValue(_values[month]);
-
-            const float estimatedWidth =
-                static_cast<float>(valueLabel.size()) * 9.6f;
-
-            if (estimatedWidth <= columnWidth + 8.0f) {
-                window->renderText(
-                    _font,
-                    valueLabel.c_str(),
-                    columnX + (columnWidth - estimatedWidth) * 0.5f,
-                    std::max(plotTop - 19.0f, barY - 20.0f),
-                    Color{205, 205, 205}
-                );
-            }
-        }
-
-        const std::string monthLabel{
-            MonthPalette::abbreviations[month]
-        };
-        const float labelWidth =
-            static_cast<float>(monthLabel.size()) * 9.6f;
-
-        window->renderText(
-            _font,
-            monthLabel.c_str(),
-            columnX + (columnWidth - labelWidth) * 0.5f,
-            plotBottom + 12.0f,
-            _availableMonths[month]
-                ? Color{205, 205, 205}
-                : Color{95, 95, 95}
-        );
+        _chartDirty = true;
     }
+
+    if (!_chartCache->isValid()) {
+        return;
+    }
+
+    // BarChart currently allocates an internal tooltip RenderTexture on
+    // every render. Cache its finished output and only invoke it while
+    // data/hover animation or pointer interaction changes the chart.
+    if (_chartDirty) {
+        window->setTarget(*_chartCache);
+        window->setRenderColor(Color::clear);
+        window->clear();
+        _chart->render(window);
+        window->resetTarget();
+        _chartDirty = false;
+    }
+
+    window->renderTexture(*_chartCache, Rect::zero, chartRect);
 }

@@ -11,6 +11,10 @@
 class Database {
 public:
     Database() = default;
+    Database(const Database&) = delete;
+    Database& operator=(const Database&) = delete;
+    Database(Database&& other) noexcept;
+    Database& operator=(Database&& other) noexcept;
 
     [[nodiscard]] std::vector<std::unique_ptr<Block>>& blocks() noexcept;
     [[nodiscard]] const std::vector<std::unique_ptr<Block>>& blocks() const noexcept;
@@ -36,6 +40,7 @@ private:
     std::vector<std::unique_ptr<Block>> _blocks;
     std::uint64_t _revision = 0;
     mutable std::int64_t _cachedTotal = 0;
+    mutable std::uint64_t _cachedRevision = 0;
     mutable bool _totalDirty = true;
 };
 

@@ -27,6 +27,11 @@ add_executable(QBudget
         src/UI/BlocksView.h
         src/UI/PieView.cpp
         src/UI/PieView.h
+        src/UI/MonthsView.cpp
+        src/UI/MonthsView.h
+        src/UI/MonthPalette.h
+        src/UI/BarView.cpp
+        src/UI/BarView.h
         src/Storage/DatabaseManager.cpp
         src/Storage/DatabaseManager.h
 )

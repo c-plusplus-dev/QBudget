@@ -95,7 +95,7 @@ private:
     MagickButton _addButton;
 
     std::optional<DragState> _drag;
-    QTip::Rect _dragPlaceholder{};
+    Rect _dragPlaceholder{};
     bool _hasDragPlaceholder = false;
 };
 

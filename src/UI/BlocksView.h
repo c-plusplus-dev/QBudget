@@ -54,15 +54,8 @@ private:
     void handleExpansion(BlockView& block);
     void showDeleteConfirmation(BlockView& block);
 
-    enum class DragType {
-        Block,
-        Item
-    };
-
     struct DragState {
-        DragType type = DragType::Block;
         BlockView* blockView = nullptr;
-        ItemView* itemView = nullptr;
         std::size_t sourceIndex = 0;
         std::size_t dropIndex = 0;
         QTip::Point startPosition{};
@@ -78,7 +71,6 @@ private:
     void animateDragLayout(float dt);
     void rebuildBlockViews();
     void reorderBlock(std::size_t source, std::size_t destination);
-    static void reorderItem(BlockView& block, std::size_t source, std::size_t destination);
 
     Font& _font;
     Database& _database;

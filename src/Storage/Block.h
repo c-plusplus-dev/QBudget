@@ -1,9 +1,7 @@
-//
-// Created by Ayaan on 2026-10-15.
-//
-
 #ifndef QBUDGET_BLOCK_H
 #define QBUDGET_BLOCK_H
+
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -36,12 +34,17 @@ public:
     std::vector<std::unique_ptr<Item>> items;
 
     [[nodiscard]] std::int64_t total() const;
+    void markChanged() noexcept;
 
     void writeTo(Writer& writer) const;
     static Block readFrom(Reader& reader);
 
     void remove(Item& item);
     void remove(std::size_t index);
+
+private:
+    mutable std::int64_t _cachedTotal = 0;
+    mutable bool _totalDirty = true;
 };
 
-#endif //QBUDGET_BLOCK_H
+#endif // QBUDGET_BLOCK_H

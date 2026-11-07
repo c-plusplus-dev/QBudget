@@ -8,6 +8,14 @@
 #include <fstream>
 #include <limits>
 #include <stdexcept>
+#include <system_error>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 Writer::Writer(Endian endian)
     : _endian(endian) {}
@@ -21,6 +29,8 @@ void Writer::writeUnsigned(
             "Integer byte count exceeds 64 bits"
         );
     }
+
+    _bytes.reserve(_bytes.size() + byteCount);
 
     if (_endian == Endian::Little) {
         for (std::size_t i = 0; i < byteCount; ++i) {
@@ -97,11 +107,7 @@ void Writer::writeString(std::string_view value, bool writeLength) {
         write64(static_cast<std::uint64_t>(value.size()));
     }
 
-    for (const char character : value) {
-        write8(static_cast<std::uint8_t>(
-            static_cast<unsigned char>(character)
-        ));
-    }
+    writeBytes(std::as_bytes(std::span(value.data(), value.size())));
 }
 
 
@@ -183,7 +189,20 @@ void Writer::save(const std::filesystem::path& path) const {
     // Replace the destination only after the temporary file is complete.
     std::error_code error;
 
+#ifdef _WIN32
+    if (!MoveFileExW(
+            temporaryPath.c_str(),
+            path.c_str(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH
+        )) {
+        error = std::error_code(
+            static_cast<int>(GetLastError()),
+            std::system_category()
+        );
+    }
+#else
     std::filesystem::rename(temporaryPath, path, error);
+#endif
 
     if (error) {
         std::error_code cleanupError;

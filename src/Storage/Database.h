@@ -1,12 +1,9 @@
-//
-// Created by Ayaan on 2026-10-15.
-//
-
 #ifndef QBUDGET_DATABASE_H
 #define QBUDGET_DATABASE_H
 
 #include "Block.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -22,12 +19,13 @@ public:
 
     void clear() noexcept;
     void remove(Block& block);
+    void markChanged() noexcept;
 
+    [[nodiscard]] std::uint64_t revision() const noexcept;
     [[nodiscard]] bool empty() const noexcept;
     [[nodiscard]] std::size_t size() const noexcept;
 
     void save(const std::filesystem::path& path) const;
-
     [[nodiscard]] std::int64_t total() const;
 
     [[nodiscard]] static Database load(
@@ -36,6 +34,9 @@ public:
 
 private:
     std::vector<std::unique_ptr<Block>> _blocks;
+    std::uint64_t _revision = 0;
+    mutable std::int64_t _cachedTotal = 0;
+    mutable bool _totalDirty = true;
 };
 
 #endif // QBUDGET_DATABASE_H

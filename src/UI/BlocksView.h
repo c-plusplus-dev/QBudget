@@ -8,9 +8,15 @@
 
 #include "Storage/Database.h"
 #include "UI/BlockView.h"
+#include "UI/Textures.h"
+
+#include <filesystem>
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <optional>
+#include <string>
 #include <vector>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
 
@@ -24,6 +30,7 @@ public:
         QTip::Rect rect,
         QTip::Window& window,
         QTip::Font& font,
+        const std::filesystem::path& assetDirectory,
         Database& database,
         int currentMonth,
         int currentYear
@@ -80,11 +87,18 @@ private:
     int _currentYear;
     float _availableHeight = 0.0f;
 
+    UITextures _textures;
     ScrollView _scrollView;
     List* _blockList = nullptr;
     Spacer* _spacer = nullptr;
 
     MagickButton _addButton;
+
+    std::uint64_t _cachedDatabaseRevision =
+        std::numeric_limits<std::uint64_t>::max();
+    int _cachedTotalMonth = -1;
+    int _cachedTotalYear = -1;
+    std::string _cachedTotalText;
 
     std::optional<DragState> _drag;
     Rect _dragPlaceholder{};

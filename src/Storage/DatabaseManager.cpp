@@ -72,10 +72,13 @@ Database* DatabaseManager::get(const int year, const int month) {
     entry->database = std::make_unique<Database>(
         Database::load(path)
     );
+    entry->savedRevision = entry->database->revision();
+    entry->persisted = true;
 
     Database* result = entry->database.get();
     _cache.emplace(key, std::move(entry));
     ++_revision;
+    _directoryCacheValid = false;
 
     return result;
 }
@@ -211,10 +214,15 @@ std::vector<int> DatabaseManager::availableMonths(const int year) const {
 }
 
 std::uint64_t DatabaseManager::revision() const noexcept {
-    std::uint64_t result = _revision;
+    std::uint64_t result = _revision + 0x9E3779B97F4A7C15ULL;
 
     for (const auto& [key, entry] : _cache) {
-        result += entry->database->revision();
+        const std::uint64_t keyValue =
+            (static_cast<std::uint64_t>(static_cast<std::uint32_t>(key.first)) << 32)
+            | static_cast<std::uint32_t>(key.second);
+        const std::uint64_t databaseRevision = entry->database->revision();
+        result ^= keyValue + databaseRevision + 0x9E3779B97F4A7C15ULL
+            + (result << 6) + (result >> 2);
     }
 
     return result;
@@ -226,17 +234,24 @@ void DatabaseManager::save(const int year, const int month) {
         return;
     }
 
+    const std::uint64_t currentRevision = entry->database->revision();
+    if (entry->persisted && entry->savedRevision == currentRevision) {
+        return;
+    }
+
     const auto path = pathFor(year, month);
-    std::filesystem::create_directories(path.parent_path());
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
 
     entry->database->save(path);
+    entry->savedRevision = currentRevision;
+    entry->persisted = true;
 }
 
 void DatabaseManager::saveAll() {
-    for (const auto& [key, entry] : _cache) {
-        const auto path = pathFor(key.first, key.second);
-        std::filesystem::create_directories(path.parent_path());
-        entry->database->save(path);
+    for (const auto& entry : _cache) {
+        save(entry.first.first, entry.first.second);
     }
 }
 

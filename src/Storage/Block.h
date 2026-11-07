@@ -3,11 +3,13 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 class Reader;
 class Writer;
+class Database;
 
 class Block {
 public:
@@ -34,6 +36,7 @@ public:
     std::vector<std::unique_ptr<Item>> items;
 
     [[nodiscard]] std::int64_t total() const;
+    [[nodiscard]] std::uint64_t revision() const noexcept;
     void markChanged() noexcept;
 
     void writeTo(Writer& writer) const;
@@ -43,8 +46,12 @@ public:
     void remove(std::size_t index);
 
 private:
+    friend class Database;
+
+    Database* _parent = nullptr;
     mutable std::int64_t _cachedTotal = 0;
     mutable bool _totalDirty = true;
+    std::uint64_t _revision = 0;
 };
 
 #endif // QBUDGET_BLOCK_H

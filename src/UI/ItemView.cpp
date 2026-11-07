@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <utility>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
+#include "UI/Visibility.h"
 
 using namespace QTip;
 
@@ -35,11 +36,15 @@ ItemView::ItemView(
     Rect rect,
     Block::Item& item,
     Font& font,
+    UITextures& textures,
+    ScrollView& parentScrollView,
     Action onEdit,
     Action onDelete
 )
     : _item(&item),
       _font(font),
+      _textures(textures),
+      _parentScrollView(parentScrollView),
       _onEdit(std::move(onEdit)),
       _onDelete(std::move(onDelete)) {
     _rect = rect;
@@ -57,10 +62,10 @@ ItemView::ItemView(
         Rect{0, 0, kButtonSize, kButtonSize},
         style,
         [this] (Window& window, const Rect& rect) {
-            if (_editButtonTexture) {
-                auto origin = rect.origin + Point{2.5, 2.5};
-                auto size = rect.size - Point{5, 5};
-                window->renderTexture(*_editButtonTexture, Rect::zero, {origin, size});
+            if (_textures.editButton && _textures.editButton->isValid()) {
+                const Point origin = rect.origin + Point{2.5f, 2.5f};
+                const Point size = rect.size - Point{5.0f, 5.0f};
+                window->renderTexture(*_textures.editButton, Rect::zero, {origin, size});
             }
         }
     );
@@ -117,8 +122,11 @@ void ItemView::resize(Point size) {
 }
 
 void ItemView::reposition(Point position) {
-    setRect({position, _rect.size});
+    const Point delta = position - _rect.origin;
+    _rect.origin = position;
     _preferredRect.origin = position;
+    _deleteButton->reposition(_deleteButton->rect().origin + delta);
+    _editButton->reposition(_editButton->rect().origin + delta);
 }
 
 void ItemView::setRect(Rect rect) {
@@ -132,10 +140,8 @@ const Rect& ItemView::rect() {
 }
 
 float ItemView::calculateWidth() const {
-    const float nameWidth = _font.getTextWidth(_item->name);
-    const float costWidth = _font.getTextWidth(
-        std::to_string(_item->cost) + "kr"
-    );
+    const float nameWidth = _font.getTextWidth(_cachedName);
+    const float costWidth = _font.getTextWidth(_cachedCostText);
 
     const float textWidth = std::max(
         nameWidth + 50.0f,
@@ -153,6 +159,8 @@ float ItemView::calculateWidth() const {
 }
 
 void ItemView::updateLayout() {
+    _cachedName = _item->name;
+    _cachedCostText = std::to_string(_item->cost) + "kr";
     _preferredRect.size.x = calculateWidth();
     _preferredRect.size.y = kItemHeight;
 
@@ -168,17 +176,8 @@ void ItemView::updateLayout() {
 }
 
 void ItemView::renderImpl(Window& window) {
-    if (!_editButtonTexture) {
-        _editButtonTexture = std::make_unique<Texture>(
-            window,
-            "assets/edit.png"
-        );
-    }
-    if (!_moveTexture) {
-        _moveTexture = std::make_unique<Texture>(
-            window,
-            "assets/drag2.png"
-        );
+    if (!isVisibleInScrollView(_rect, _parentScrollView)) {
+        return;
     }
 
     window->setRenderColor({40, 40, 40});
@@ -186,17 +185,15 @@ void ItemView::renderImpl(Window& window) {
 
     window->renderText(
         _font,
-        _item->name.c_str(),
+        _cachedName.c_str(),
         _rect.origin.x + kHorizontalPadding,
         _rect.origin.y + 10.0f,
         Color::white
     );
 
-    const std::string cost = std::to_string(_item->cost) + "kr";
-
     window->renderText(
         _font,
-        cost.c_str(),
+        _cachedCostText.c_str(),
         _rect.origin.x + kHorizontalPadding,
         _rect.origin.y + 70.0f,
         Color::white
@@ -205,8 +202,10 @@ void ItemView::renderImpl(Window& window) {
     _deleteButton->render(window);
     _editButton->render(window);
 
-    auto size = 24.0f;
-    auto x = _rect.origin.x + _rect.size.x - size - 5.0f;
-    auto y = _rect.origin.y + _rect.size.y - size - 5.0f;
-    window->renderTexture(*_moveTexture, Rect::zero, {x, y, size, size});
+    constexpr float size = 24.0f;
+    const float x = _rect.origin.x + _rect.size.x - size - 5.0f;
+    const float y = _rect.origin.y + _rect.size.y - size - 5.0f;
+    if (_textures.itemMove && _textures.itemMove->isValid()) {
+        window->renderTexture(*_textures.itemMove, Rect::zero, {x, y, size, size});
+    }
 }

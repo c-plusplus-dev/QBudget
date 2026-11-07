@@ -31,6 +31,8 @@ public:
 private:
     struct Entry {
         std::unique_ptr<Database> database;
+        std::uint64_t savedRevision = 0;
+        bool persisted = false;
     };
 
     void refreshDirectoryCache() const;

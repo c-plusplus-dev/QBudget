@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Storage/DatabaseManager.h"
@@ -43,6 +44,7 @@ private:
     struct MonthTile {
         QTip::Rect rect{};
         std::int64_t total = 0;
+        std::string detail = "No saved data";
         bool available = false;
     };
 
@@ -63,7 +65,9 @@ private:
     std::unique_ptr<Button> _previousYearButton;
     std::unique_ptr<Button> _nextYearButton;
 
-    float _refreshTimer = 0.0f;
+    std::uint64_t _cachedManagerRevision = UINT64_MAX;
+    int _cachedYear = -1;
+    std::string _cachedYearText;
 };
 
 #endif // QBUDGET_UI_MONTHSVIEW_H

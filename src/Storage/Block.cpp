@@ -2,6 +2,7 @@
 
 #include "IO/Reader.h"
 #include "IO/Writer.h"
+#include "Database.h"
 
 #include <algorithm>
 #include <limits>
@@ -30,8 +31,12 @@ void checkedAdd(std::int64_t& total, const std::int32_t value) {
 
 Block::Item::Item(Item&& item) noexcept
     : name(std::move(item.name)),
-      cost(item.cost),
-      parent(item.parent) {}
+      cost(item.cost) {
+    if (item.parent) {
+        item.parent->markChanged();
+        item.parent = nullptr;
+    }
+}
 
 Block::Item::Item(std::string name, const std::int32_t cost)
     : name(std::move(name)),
@@ -51,10 +56,24 @@ Block::Item Block::Item::readFrom(Reader& reader) {
 
 Block::Block(Block&& block) noexcept
     : name(std::move(block.name)),
-      items(std::move(block.items)) {
-    for (auto& item : items) {
-        item->parent = this;
+      items(std::move(block.items)),
+      _cachedTotal(block._cachedTotal),
+      _totalDirty(block._totalDirty),
+      _revision(block._revision) {
+    if (block._parent) {
+        block._parent->markChanged();
+        block._parent = nullptr;
     }
+
+    for (auto& item : items) {
+        if (item) {
+            item->parent = this;
+        }
+    }
+
+    block._cachedTotal = 0;
+    block._totalDirty = true;
+    block._revision = 0;
 }
 
 Block::Block(
@@ -87,8 +106,17 @@ std::int64_t Block::total() const {
     return sum;
 }
 
+std::uint64_t Block::revision() const noexcept {
+    return _revision;
+}
+
 void Block::markChanged() noexcept {
+    ++_revision;
     _totalDirty = true;
+
+    if (_parent) {
+        _parent->markChanged();
+    }
 }
 
 void Block::writeTo(Writer& writer) const {
@@ -96,6 +124,9 @@ void Block::writeTo(Writer& writer) const {
     writer.write64(static_cast<std::uint64_t>(items.size()));
 
     for (const auto& item : items) {
+        if (!item) {
+            throw std::logic_error("Cannot serialize a null item");
+        }
         item->writeTo(writer);
     }
 }

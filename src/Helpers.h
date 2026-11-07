@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <numbers>
 #include <vector>
@@ -130,12 +131,12 @@ inline void DrawThickLineHV(
 
 inline std::filesystem::path getUserHome() {
 #ifdef _WIN32
-    if (const char* home = std::getenv("USERPROFILE")) {
-        return home;
+    if (const wchar_t* home = ::_wgetenv(L"USERPROFILE"); home && *home) {
+        return std::filesystem::path(home);
     }
 #else
-    if (const char* home = std::getenv("HOME")) {
-        return home;
+    if (const char* home = std::getenv("HOME"); home && *home) {
+        return std::filesystem::path(home);
     }
 #endif
 
@@ -143,13 +144,19 @@ inline std::filesystem::path getUserHome() {
 }
 
 inline std::filesystem::path getAppDirectory(const std::filesystem::path& directoryName) {
-    if (directoryName.is_absolute()) {
+    if (directoryName.empty()) {
         return {};
+    }
+    if (directoryName.is_absolute()) {
+        return directoryName;
     }
 
 #ifdef _WIN32
-    if (const char* appData = std::getenv("LOCALAPPDATA")) {
+    if (const wchar_t* appData = ::_wgetenv(L"LOCALAPPDATA"); appData && *appData) {
         return std::filesystem::path(appData) / directoryName;
+    }
+    if (const auto home = getUserHome(); !home.empty()) {
+        return home / "AppData" / "Local" / directoryName;
     }
 #elif defined(__APPLE__)
     if (const auto home = getUserHome(); !home.empty()) {
@@ -167,7 +174,9 @@ inline std::filesystem::path getAppDirectory(const std::filesystem::path& direct
     }
 #endif
 
-    return {};
+    std::error_code error;
+    const auto current = std::filesystem::current_path(error);
+    return error ? directoryName : current / directoryName;
 }
 
 #endif // QBUDGET_HELPERS_H

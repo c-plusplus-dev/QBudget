@@ -121,8 +121,8 @@ void MonthsView::layout() {
         std::max(48.0f, (gridHeight - 3.0f * kTileGap) / 4.0f);
 
     for (std::size_t i = 0; i < _tiles.size(); ++i) {
-        const float column = static_cast<float>(i % 3);
-        const float row = static_cast<float>(i / 3);
+        const auto column = static_cast<float>(i % 3);
+        const auto row = static_cast<float>(i / 3);
 
         _tiles[i].rect = {
             gridX + column * (tileWidth + kTileGap),
@@ -175,7 +175,7 @@ void MonthsView::selectYear(const int direction) {
     }
 }
 
-void MonthsView::selectMonth(const int month) {
+void MonthsView::selectMonth(const int month) const {
     if (month < 1 || month > 12) {
         return;
     }

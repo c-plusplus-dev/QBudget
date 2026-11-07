@@ -76,8 +76,11 @@ void DatabaseManager::save(int year, int month) {
 
     auto& entry = *it;
 
+    const auto path = pathFor(year, month);
+    std::filesystem::create_directories(path.parent_path());
+
     auto& database = entry.database;
-    database->save(pathFor(year, month));
+    database->save(path);
 
     entry.dirty = false;
 }

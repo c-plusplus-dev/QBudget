@@ -4,27 +4,27 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <filesystem>
 #include <numbers>
 #include <vector>
 
 #include <Q-Tip/QTip.h>
+using namespace QTip;
 
 inline void DrawScrollGradient(
-    QTip::Window& window,
+    Window& window,
     int width,
     int startX,
     int startY,
     int fadeHeight,
-    QTip::Color background,
+    Color background,
     bool top = false
 ) {
     if (width <= 0 || fadeHeight <= 0) {
         return;
     }
 
-    window->setBlendMode(QTip::RenderBlendMode::Blend);
+    window->setBlendMode(RenderBlendMode::Blend);
 
     for (int y = 0; y < fadeHeight; ++y) {
         const float ratio =
@@ -40,7 +40,7 @@ inline void DrawScrollGradient(
             alpha
         });
 
-        const float lineY = static_cast<float>(startY + y);
+        const auto lineY = static_cast<float>(startY + y);
         window->renderLine({
             static_cast<float>(startX),
             lineY,
@@ -53,12 +53,12 @@ inline void DrawScrollGradient(
 }
 
 inline double DrawPieSlice(
-    QTip::Window& window,
+    Window& window,
     float cx,
     float cy,
     float radius,
     double percent,
-    QTip::Color color,
+    Color color,
     double startAngle = -std::numbers::pi / 2.0
 ) {
     if (percent <= 0.0) {
@@ -70,7 +70,7 @@ inline double DrawPieSlice(
     const double endAngle =
         startAngle + 2.0 * std::numbers::pi * percent;
 
-    std::vector<QTip::Point> vertices;
+    std::vector<Point> vertices;
     vertices.reserve(static_cast<std::size_t>(segments) + 2);
     vertices.push_back({cx, cy});
 
@@ -85,13 +85,13 @@ inline double DrawPieSlice(
     }
 
     window->setRenderColor(color);
-    window->renderPolygon(QTip::Polygon{vertices});
+    window->renderPolygon(Polygon{vertices});
 
     return endAngle;
 }
 
 inline void DrawThickLineHV(
-    QTip::Window& window,
+    Window& window,
     float x1,
     float y1,
     float x2,
@@ -103,7 +103,7 @@ inline void DrawThickLineHV(
         return;
     }
 
-    QTip::Rect rect{};
+    Rect rect{};
 
     if (x1 == x2) {
         rect.origin.x = x1 - thickness / 2.0f;
@@ -129,13 +129,43 @@ inline void DrawThickLineHV(
 }
 
 inline std::filesystem::path getUserHome() {
-    if (const char* home = std::getenv("HOME")) {
-        return home;
-    }
-
+#ifdef _WIN32
     if (const char* home = std::getenv("USERPROFILE")) {
         return home;
     }
+#else
+    if (const char* home = std::getenv("HOME")) {
+        return home;
+    }
+#endif
+
+    return {};
+}
+
+inline std::filesystem::path getAppDirectory(const std::filesystem::path& directoryName) {
+    if (directoryName.is_absolute()) {
+        return {};
+    }
+
+#ifdef _WIN32
+    if (const char* appData = std::getenv("LOCALAPPDATA")) {
+        return std::filesystem::path(appData) / directoryName;
+    }
+#elif defined(__APPLE__)
+    if (const auto home = getUserHome(); !home.empty()) {
+        return home / "Library" / "Application Support" / directoryName;
+    }
+#else
+    if (const char* dataHome = std::getenv("XDG_DATA_HOME")) {
+        if (*dataHome == '/') {
+            return std::filesystem::path(dataHome) / directoryName;
+        }
+    }
+
+    if (const auto home = getUserHome(); !home.empty()) {
+        return home / ".local" / "share" / directoryName;
+    }
+#endif
 
     return {};
 }

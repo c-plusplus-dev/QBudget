@@ -199,6 +199,12 @@ void BarView::selectBlock(const int direction) {
 }
 
 bool BarView::handleEvent(const Event& event) {
+    if ((event.type == EventType::MouseButtonPressed ||
+         event.type == EventType::MouseButtonReleased) &&
+        event.mouseButton.button != MouseButton::Left) {
+        return true;
+    }
+
     const auto current = std::ranges::find(_blockNames, _selectedBlock);
     const bool hasSelection = current != _blockNames.end();
     const auto index = hasSelection

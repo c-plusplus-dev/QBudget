@@ -8,6 +8,7 @@
 #include <charconv>
 #include <ranges>
 #include <set>
+#include <string>
 #include <system_error>
 #include <utility>
 
@@ -115,7 +116,7 @@ std::vector<int> DatabaseManager::availableYears() const {
         years.insert(key.first);
     }
 
-    return {years.begin(), years.end()};
+    return std::vector<int>(years.begin(), years.end());
 }
 
 std::vector<int> DatabaseManager::availableMonths(const int year) const {
@@ -163,7 +164,7 @@ std::vector<int> DatabaseManager::availableMonths(const int year) const {
         }
     }
 
-    return {months.begin(), months.end()};
+    return std::vector<int>(months.begin(), months.end());
 }
 
 void DatabaseManager::save(int year, int month) {

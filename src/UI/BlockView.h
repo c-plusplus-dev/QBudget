@@ -83,6 +83,10 @@ private:
     );
     bool beginItemDrag(QTip::Point position);
     void updateItemDrag(QTip::Point position);
+    [[nodiscard]] bool canPlaceDraggedItemAt(
+        std::size_t destination,
+        int targetRow
+    ) const;
     void finishItemDrag();
     void cancelItemDrag();
     void clearItemDragIndicators();

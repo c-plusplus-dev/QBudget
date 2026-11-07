@@ -395,37 +395,122 @@ void BlockView::updateItemDrag(const Point position) {
         itemPosition - _itemDrag->grabOffset
     );
 
+    // Calculate the candidate insertion index from the normal layout,
+    // not the currently animated rectangles. This keeps the target stable
+    // while the other items are moving towards their preview positions.
+    const float availableWidth =
+        std::max(0.0f, _rect.size.x - 2.0f * kItemMargin);
+    if (availableWidth <= 0.0f) {
+        return;
+    }
+
     const float rowHeight = kItemHeight + kItemSpacing;
-    const int row = std::max(
+    const int targetRow = std::max(
         0,
         static_cast<int>(std::floor(
             (itemPosition.y + kItemSpacing * 0.5f) / rowHeight
         ))
     );
 
+    float x = 0.0f;
+    float y = 0.0f;
     std::size_t destination = 0;
 
-    for (std::size_t index = 0;
-         index < _itemViews.size();
-         ++index) {
-        if (index == _itemDrag->sourceIndex) {
+    for (ItemView* itemView : _itemViews) {
+        if (itemView == _itemDrag->itemView) {
             continue;
         }
 
-        const Rect itemRect = _itemViews[index]->rect();
+        const float width = itemView->preferredSize().x;
+
+        if (x > 0.0f && x + width > availableWidth) {
+            x = 0.0f;
+            y += rowHeight;
+        }
+
         const int itemRow = static_cast<int>(std::floor(
-            (itemRect.origin.y + kItemSpacing * 0.5f) / rowHeight
+            (y + kItemSpacing * 0.5f) / rowHeight
         ));
 
-        if (itemRow < row ||
-            (itemRow == row && itemRect.center().x < itemPosition.x)) {
+        if (itemRow < targetRow ||
+            (itemRow == targetRow &&
+             x + width * 0.5f < itemPosition.x)) {
             ++destination;
         }
+
+        x += width + kItemSpacing;
     }
 
-    _itemDrag->dropIndex = _itemViews.size() <= 1
+    destination = _itemViews.size() <= 1
         ? 0
         : std::min(destination, _itemViews.size() - 1);
+
+    // Do not shift the other items if the dragged item cannot occupy the
+    // requested row. Keep the previous valid drop position instead.
+    if (canPlaceDraggedItemAt(destination, targetRow)) {
+        _itemDrag->dropIndex = destination;
+    }
+}
+
+bool BlockView::canPlaceDraggedItemAt(
+    const std::size_t destination,
+    const int targetRow
+) const {
+    if (!_itemDrag || !_itemDrag->itemView) {
+        return false;
+    }
+
+    const float availableWidth =
+        std::max(0.0f, _rect.size.x - 2.0f * kItemMargin);
+    const float draggedWidth =
+        _itemDrag->itemView->preferredSize().x;
+
+    // An item wider than the entire row cannot be inserted anywhere.
+    if (availableWidth <= 0.0f || draggedWidth > availableWidth) {
+        return false;
+    }
+
+    const float rowHeight = kItemHeight + kItemSpacing;
+    float x = 0.0f;
+    float y = 0.0f;
+    std::size_t remainingIndex = 0;
+
+    const auto fitsInTargetRow = [&] {
+        // The item may wrap to the next row, but it must end up on the
+        // row the pointer is targeting.
+        if (x > 0.0f && x + draggedWidth > availableWidth) {
+            x = 0.0f;
+            y += rowHeight;
+        }
+
+        const int placementRow = static_cast<int>(std::floor(
+            (y + kItemSpacing * 0.5f) / rowHeight
+        ));
+
+        return placementRow == targetRow;
+    };
+
+    for (ItemView* itemView : _itemViews) {
+        if (itemView == _itemDrag->itemView) {
+            continue;
+        }
+
+        if (remainingIndex == destination) {
+            return fitsInTargetRow();
+        }
+
+        const float width = itemView->preferredSize().x;
+
+        if (x > 0.0f && x + width > availableWidth) {
+            x = 0.0f;
+            y += rowHeight;
+        }
+
+        x += width + kItemSpacing;
+        ++remainingIndex;
+    }
+
+    return fitsInTargetRow();
 }
 
 void BlockView::clearItemDragIndicators() {

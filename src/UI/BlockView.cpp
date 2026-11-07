@@ -6,6 +6,7 @@
 #include "BlockView.h"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
 #include <utility>
 #include <cinttypes>
@@ -23,6 +24,11 @@ constexpr float kCollapsedHeight = 100.0f;
 constexpr float kItemHeight = 100.0f;
 constexpr float kItemSpacing = 10.0f;
 constexpr float kItemMargin = 20.0f;
+constexpr float kDragHandleSize = 24.0f;
+constexpr float kDragHandleInset = 5.0f;
+constexpr float kDragStartDistance = 5.0f;
+constexpr float kAutoScrollEdge = 28.0f;
+constexpr float kAutoScrollSpeed = 520.0f;
 constexpr float kItemTop = 45.0f;
 
 constexpr float kButtonSize = 30.0f;
@@ -141,6 +147,50 @@ const Block& BlockView::block() const noexcept {
     return _block;
 }
 
+BlockView::State BlockView::saveState() const {
+    return {
+        .expanded = expanded,
+        .itemScrollPosition = _itemScrollView->scrollPosition()
+    };
+}
+
+void BlockView::restoreItemScrollPosition(const Point position) {
+    _itemScrollView->scrollTo(position);
+}
+
+bool BlockView::handleItemDragEvent(
+    const Event& event,
+    const Point contentPosition,
+    const bool allowStart
+) {
+    if (_itemDrag) {
+        if (event.type == EventType::WindowUnfocused) {
+            cancelItemDrag();
+            return true;
+        }
+
+        if (event.type == EventType::MouseMoved) {
+            updateItemDrag(contentPosition);
+        } else if (event.type == EventType::MouseButtonReleased &&
+                   event.mouseButton.button == MouseButton::Left) {
+            updateItemDrag(contentPosition);
+            finishItemDrag();
+        }
+
+        // Keep the pointer gesture captured until its matching release.
+        return false;
+    }
+
+    if (allowStart &&
+        event.type == EventType::MouseButtonPressed &&
+        event.mouseButton.button == MouseButton::Left &&
+        beginItemDrag(contentPosition)) {
+        return false;
+    }
+
+    return true;
+}
+
 void BlockView::setExpanded(const bool value) {
     if (expanded == value) {
         return;
@@ -173,6 +223,335 @@ bool BlockView::handleEvent(const Event& event) {
     }
 
     return UIObject::handleEvent(event);
+}
+
+void BlockView::tick(Clock& clock, const double dt) {
+    _itemScrollView->tick(clock, dt);
+
+    if (!_itemDrag || !_itemDrag->moved) {
+        return;
+    }
+
+    const float deltaTime = static_cast<float>(std::max(0.0, dt));
+
+    // The outer ScrollView owns the block list. While an item is being
+    // dragged, keep the pointer anchored to the cursor as that view scrolls.
+    ScrollView* outerScrollView = nullptr;
+    for (UIObject* ancestor = parent; ancestor; ancestor = ancestor->parent) {
+        if (auto* scrollView = dynamic_cast<ScrollView*>(ancestor)) {
+            outerScrollView = scrollView;
+            break;
+        }
+    }
+
+    if (outerScrollView) {
+        const Point oldScroll = outerScrollView->scrollPosition();
+        const Rect outerViewport = outerScrollView->rect();
+        const Point pointerInViewport =
+            _itemDrag->pointerPosition - oldScroll + outerViewport.origin;
+
+        if (pointerInViewport.y < outerViewport.origin.y + kAutoScrollEdge) {
+            const float strength = std::clamp(
+                (outerViewport.origin.y + kAutoScrollEdge -
+                    pointerInViewport.y) / kAutoScrollEdge,
+                0.0f,
+                1.0f
+            );
+            outerScrollView->scrollBy({
+                0.0f,
+                -kAutoScrollSpeed * strength * deltaTime
+            });
+        } else if (pointerInViewport.y >
+                   outerViewport.origin.y + outerViewport.size.y -
+                       kAutoScrollEdge) {
+            const float edge = outerViewport.origin.y +
+                outerViewport.size.y - kAutoScrollEdge;
+            const float strength = std::clamp(
+                (pointerInViewport.y - edge) / kAutoScrollEdge,
+                0.0f,
+                1.0f
+            );
+            outerScrollView->scrollBy({
+                0.0f,
+                kAutoScrollSpeed * strength * deltaTime
+            });
+        }
+
+        _itemDrag->pointerPosition +=
+            outerScrollView->scrollPosition() - oldScroll;
+    }
+
+    const Rect itemViewport = _itemScrollView->rect();
+    if (itemViewport.isPointInside(_itemDrag->pointerPosition)) {
+        const float viewportTop = itemViewport.origin.y;
+        const float viewportBottom = viewportTop + itemViewport.size.y;
+
+        if (_itemDrag->pointerPosition.y <
+            viewportTop + kAutoScrollEdge) {
+            const float strength = std::clamp(
+                (viewportTop + kAutoScrollEdge -
+                    _itemDrag->pointerPosition.y) / kAutoScrollEdge,
+                0.0f,
+                1.0f
+            );
+            _itemScrollView->scrollBy({
+                0.0f,
+                -kAutoScrollSpeed * strength * deltaTime
+            });
+        } else if (_itemDrag->pointerPosition.y >
+                   viewportBottom - kAutoScrollEdge) {
+            const float strength = std::clamp(
+                (_itemDrag->pointerPosition.y -
+                    (viewportBottom - kAutoScrollEdge)) / kAutoScrollEdge,
+                0.0f,
+                1.0f
+            );
+            _itemScrollView->scrollBy({
+                0.0f,
+                kAutoScrollSpeed * strength * deltaTime
+            });
+        }
+    }
+
+    updateItemDrag(_itemDrag->pointerPosition);
+    animateItemDragLayout(deltaTime);
+}
+
+bool BlockView::beginItemDrag(const Point position) {
+    if (!expanded || _itemViews.empty()) {
+        return false;
+    }
+
+    const Rect itemViewport = _itemScrollView->rect();
+    if (!itemViewport.isPointInside(position)) {
+        return false;
+    }
+
+    const Point itemPosition =
+        position - itemViewport.origin +
+        _itemScrollView->scrollPosition();
+
+    for (std::size_t itemIndex = 0;
+         itemIndex < _itemViews.size();
+         ++itemIndex) {
+        ItemView* itemView = _itemViews[itemIndex];
+        const Rect itemRect = itemView->rect();
+
+        const Rect handleRect{
+            itemRect.origin.x + itemRect.size.x -
+                kDragHandleSize - kDragHandleInset,
+            itemRect.origin.y + itemRect.size.y -
+                kDragHandleSize - kDragHandleInset,
+            kDragHandleSize,
+            kDragHandleSize
+        };
+
+        if (!handleRect.isPointInside(itemPosition)) {
+            continue;
+        }
+
+        _itemDrag = ItemDragState{
+            .itemView = itemView,
+            .sourceIndex = itemIndex,
+            .dropIndex = itemIndex,
+            .startPosition = position,
+            .pointerPosition = position,
+            .grabOffset = itemPosition - itemRect.origin
+        };
+        return true;
+    }
+
+    return false;
+}
+
+void BlockView::updateItemDrag(const Point position) {
+    if (!_itemDrag) {
+        return;
+    }
+
+    _itemDrag->pointerPosition = position;
+
+    const float dx = position.x - _itemDrag->startPosition.x;
+    const float dy = position.y - _itemDrag->startPosition.y;
+
+    if (!_itemDrag->moved &&
+        dx * dx + dy * dy >=
+            kDragStartDistance * kDragStartDistance) {
+        _itemDrag->moved = true;
+    }
+
+    if (!_itemDrag->moved) {
+        return;
+    }
+
+    _manualItemLayout = true;
+    _itemDrag->itemView->setZIndex(1000);
+
+    const Rect viewport = _itemScrollView->rect();
+    const Point itemPosition =
+        position - viewport.origin +
+        _itemScrollView->scrollPosition();
+    _itemDrag->itemView->reposition(
+        itemPosition - _itemDrag->grabOffset
+    );
+
+    const float rowHeight = kItemHeight + kItemSpacing;
+    const int row = std::max(
+        0,
+        static_cast<int>(std::floor(
+            (itemPosition.y + kItemSpacing * 0.5f) / rowHeight
+        ))
+    );
+
+    std::size_t destination = 0;
+
+    for (std::size_t index = 0;
+         index < _itemViews.size();
+         ++index) {
+        if (index == _itemDrag->sourceIndex) {
+            continue;
+        }
+
+        const Rect itemRect = _itemViews[index]->rect();
+        const int itemRow = static_cast<int>(std::floor(
+            (itemRect.origin.y + kItemSpacing * 0.5f) / rowHeight
+        ));
+
+        if (itemRow < row ||
+            (itemRow == row && itemRect.center().x < itemPosition.x)) {
+            ++destination;
+        }
+    }
+
+    _itemDrag->dropIndex = _itemViews.size() <= 1
+        ? 0
+        : std::min(destination, _itemViews.size() - 1);
+}
+
+void BlockView::clearItemDragIndicators() {
+    _hasItemDragPlaceholder = false;
+    _manualItemLayout = false;
+
+    for (ItemView* itemView : _itemViews) {
+        itemView->setZIndex(0);
+    }
+
+    layoutItemViews();
+}
+
+void BlockView::cancelItemDrag() {
+    if (!_itemDrag) {
+        return;
+    }
+
+    clearItemDragIndicators();
+    _itemDrag.reset();
+}
+
+void BlockView::finishItemDrag() {
+    if (!_itemDrag) {
+        return;
+    }
+
+    updateItemDrag(_itemDrag->pointerPosition);
+    const ItemDragState drag = *_itemDrag;
+
+    clearItemDragIndicators();
+    _itemDrag.reset();
+
+    auto& items = _block.items;
+    if (!drag.moved ||
+        drag.sourceIndex >= items.size() ||
+        drag.dropIndex >= items.size() ||
+        drag.sourceIndex == drag.dropIndex) {
+        return;
+    }
+
+    if (drag.dropIndex < drag.sourceIndex) {
+        std::rotate(
+            items.begin() + static_cast<std::ptrdiff_t>(drag.dropIndex),
+            items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
+            items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1)
+        );
+    } else {
+        std::rotate(
+            items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex),
+            items.begin() + static_cast<std::ptrdiff_t>(drag.sourceIndex + 1),
+            items.begin() + static_cast<std::ptrdiff_t>(drag.dropIndex + 1)
+        );
+    }
+
+    rebuildItemViews();
+}
+
+void BlockView::animateItemDragLayout(const float dt) {
+    if (!_itemDrag || !_itemDrag->moved) {
+        return;
+    }
+
+    const float blend = 1.0f - std::exp(-18.0f * std::max(0.0f, dt));
+    const Rect viewport = _itemScrollView->rect();
+    const Point innerScroll = _itemScrollView->scrollPosition();
+    const float availableWidth =
+        std::max(0.0f, _rect.size.x - 2.0f * kItemMargin);
+
+    float x = 0.0f;
+    float y = 0.0f;
+    std::size_t remainingIndex = 0;
+    const float rowStep = kItemHeight + kItemSpacing;
+
+    auto placePlaceholder = [&] {
+        const Rect itemRect = _itemDrag->itemView->rect();
+
+        if (x > 0.0f && x + itemRect.size.x > availableWidth) {
+            x = 0.0f;
+            y += rowStep;
+        }
+
+        _itemDragPlaceholder = {
+            viewport.origin + Point{x - innerScroll.x, y - innerScroll.y},
+            itemRect.size
+        };
+        _hasItemDragPlaceholder = true;
+        x += itemRect.size.x + kItemSpacing;
+    };
+
+    for (ItemView* itemView : _itemViews) {
+        if (itemView == _itemDrag->itemView) {
+            continue;
+        }
+
+        if (remainingIndex == _itemDrag->dropIndex) {
+            placePlaceholder();
+        }
+
+        const Rect current = itemView->rect();
+        const float width = itemView->preferredSize().x;
+
+        if (x > 0.0f && x + width > availableWidth) {
+            x = 0.0f;
+            y += rowStep;
+        }
+
+        const Point target{x, y};
+        itemView->reposition({
+            current.origin.x + (target.x - current.origin.x) * blend,
+            current.origin.y + (target.y - current.origin.y) * blend
+        });
+
+        x += width + kItemSpacing;
+        ++remainingIndex;
+    }
+
+    if (!_hasItemDragPlaceholder) {
+        placePlaceholder();
+    }
+
+    const Point itemPosition =
+        _itemDrag->pointerPosition - viewport.origin + innerScroll;
+    _itemDrag->itemView->reposition(
+        itemPosition - _itemDrag->grabOffset
+    );
 }
 
 Point BlockView::minimumSize() const {
@@ -586,6 +965,12 @@ void BlockView::renderImpl(Window& window) {
         _add->render(window);
 
         syncItemViews();
+
+        if (_itemDrag && _itemDrag->moved && _hasItemDragPlaceholder) {
+            window->setRenderColor({12, 12, 12});
+            window->renderRoundedRect(_itemDragPlaceholder, 10);
+        }
+
         _itemScrollView->render(window);
     } else {
         _delete->render(window);

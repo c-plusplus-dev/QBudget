@@ -20,6 +20,7 @@ namespace {
 constexpr float kPadding = 10.0f;
 constexpr float kGap = 15.0f;
 constexpr float kLegendRowHeight = 58.0f;
+constexpr float kLegendRowSpacing = 8.0f;
 constexpr float kExpandedLegendRowHeight = 86.0f;
 constexpr float kLegendScrollMargin = 20.0f;
 constexpr float kHoverAnimationSpeed = 8.0f;

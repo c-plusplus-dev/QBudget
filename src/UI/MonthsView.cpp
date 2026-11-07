@@ -15,30 +15,15 @@ constexpr float kSidePadding = 18.0f;
 constexpr float kHeaderHeight = 58.0f;
 constexpr float kTileGap = 12.0f;
 
-void drawYearButton(
-    Window& window,
-    const Font& font,
-    const Rect& rect,
-    const char* label,
-    const bool enabled,
-    const bool hovered
-) {
-    const Color background = !enabled
-        ? Color{24, 24, 24}
-        : hovered
-            ? Color{55, 55, 55}
-            : Color{38, 38, 38};
-
-    window->setRenderColor(background);
-    window->renderRoundedRect(rect, 7);
-
-    window->renderText(
+ButtonStyle makeYearButtonStyle(const Font& font) {
+    return {
+        Color{38, 38, 38},
+        Color{55, 55, 55},
+        Color{70, 70, 70},
+        Color{24, 24, 24},
         font,
-        label,
-        rect.origin.x + rect.size.x * 0.5f - 4.8f,
-        rect.origin.y + 5.0f,
-        enabled ? Color::white : Color{100, 100, 100}
-    );
+        Color::white
+    };
 }
 
 } // namespace
@@ -56,6 +41,26 @@ MonthsView::MonthsView(
       _selectedMonth(selectedMonth),
       _selectedYear(selectedYear),
       _selectionChanged(std::move(selectionChanged)) {
+    const ButtonStyle buttonStyle = makeYearButtonStyle(_font);
+
+    _previousYearButton = std::make_unique<Button>(
+        Rect{},
+        "<",
+        buttonStyle
+    );
+    _nextYearButton = std::make_unique<Button>(
+        Rect{},
+        ">",
+        buttonStyle
+    );
+
+    _previousYearButton->setOnClick([this] {
+        selectYear(-1);
+    });
+    _nextYearButton->setOnClick([this] {
+        selectYear(1);
+    });
+
     _rect = rect;
     _preferredRect = rect;
 
@@ -96,19 +101,19 @@ void MonthsView::layout() {
     const float width = std::max(0.0f, _rect.size.x);
     const float height = std::max(0.0f, _rect.size.y);
 
-    _previousYearRect = {
+    _previousYearButton->setRect({
         _rect.origin.x + width - 116.0f,
         _rect.origin.y + 12.0f,
         32.0f,
         32.0f
-    };
+    });
 
-    _nextYearRect = {
+    _nextYearButton->setRect({
         _rect.origin.x + width - 38.0f,
         _rect.origin.y + 12.0f,
         32.0f,
         32.0f
-    };
+    });
 
     const float gridX = _rect.origin.x + kSidePadding;
     const float gridY = _rect.origin.y + kHeaderHeight;
@@ -193,9 +198,21 @@ void MonthsView::selectMonth(const int month) const {
 }
 
 bool MonthsView::handleEvent(const Event& event) {
-    if (event.type == EventType::MouseMoved) {
-        _mousePosition = event.mouseMove.position;
-        return true;
+    const auto yearIt = std::ranges::find(_years, _selectedYear);
+    const bool canGoPrevious =
+        yearIt != _years.end() && yearIt != _years.begin();
+    const bool canGoNext =
+        yearIt != _years.end() && yearIt + 1 != _years.end();
+
+    _previousYearButton->setDisabled(!canGoPrevious);
+    _nextYearButton->setDisabled(!canGoNext);
+
+    if (!_previousYearButton->handleEvent(event)) {
+        return false;
+    }
+
+    if (!_nextYearButton->handleEvent(event)) {
+        return false;
     }
 
     if (event.type != EventType::MouseButtonReleased ||
@@ -204,23 +221,6 @@ bool MonthsView::handleEvent(const Event& event) {
     }
 
     const Point position = event.mouseButton.position;
-    _mousePosition = position;
-
-    const auto yearIt = std::ranges::find(_years, _selectedYear);
-    if (yearIt != _years.end()) {
-        const auto index = yearIt - _years.begin();
-
-        if (_previousYearRect.isPointInside(position) && index > 0) {
-            selectYear(-1);
-            return false;
-        }
-
-        if (_nextYearRect.isPointInside(position) &&
-            index + 1 < static_cast<std::ptrdiff_t>(_years.size())) {
-            selectYear(1);
-            return false;
-        }
-    }
 
     for (std::size_t i = 0; i < _tiles.size(); ++i) {
         if (_tiles[i].available &&
@@ -283,31 +283,20 @@ void MonthsView::renderImpl(Window& window) {
     const bool canGoNext = yearIt != _years.end() &&
         yearIt + 1 != _years.end();
 
-    drawYearButton(
-        window,
-        _font,
-        _previousYearRect,
-        "<",
-        canGoPrevious,
-        canGoPrevious && _previousYearRect.isPointInside(_mousePosition)
-    );
+    _previousYearButton->setDisabled(!canGoPrevious);
+    _nextYearButton->setDisabled(!canGoNext);
 
-    drawYearButton(
-        window,
-        _font,
-        _nextYearRect,
-        ">",
-        canGoNext,
-        canGoNext && _nextYearRect.isPointInside(_mousePosition)
-    );
+    _previousYearButton->render(window);
+    _nextYearButton->render(window);
 
+    const Rect& previousYearRect = _previousYearButton->rect();
     const std::string yearText = std::to_string(_selectedYear);
     const float yearTextWidth = static_cast<float>(yearText.size()) * 9.6f;
 
     window->renderText(
         _font,
         yearText.c_str(),
-        _previousYearRect.origin.x + 36.0f +
+        previousYearRect.origin.x + 36.0f +
             (42.0f - yearTextWidth) * 0.5f,
         _rect.origin.y + 17.0f,
         Color::white

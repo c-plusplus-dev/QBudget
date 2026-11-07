@@ -27,30 +27,15 @@ std::string compactValue(const std::int64_t value) {
     return std::to_string(value);
 }
 
-void drawBlockArrow(
-    Window& window,
-    const Font& font,
-    const Rect& rect,
-    const char* label,
-    const bool enabled,
-    const bool hovered
-) {
-    const Color background = !enabled
-        ? Color{25, 25, 25}
-        : hovered
-            ? Color{55, 55, 55}
-            : Color{40, 40, 40};
-
-    window->setRenderColor(background);
-    window->renderRoundedRect(rect, 7);
-
-    window->renderText(
+ButtonStyle makeBlockButtonStyle(const Font& font) {
+    return {
+        Color{40, 40, 40},
+        Color{55, 55, 55},
+        Color{70, 70, 70},
+        Color{25, 25, 25},
         font,
-        label,
-        rect.origin.x + 9.0f,
-        rect.origin.y + 5.0f,
-        enabled ? Color::white : Color{90, 90, 90}
-    );
+        Color::white
+    };
 }
 
 } // namespace
@@ -64,6 +49,26 @@ BarView::BarView(
     : _manager(manager),
       _font(font),
       _selectedYear(selectedYear) {
+    const ButtonStyle buttonStyle = makeBlockButtonStyle(_font);
+
+    _previousBlockButton = std::make_unique<Button>(
+        Rect{},
+        "◀",
+        buttonStyle
+    );
+    _nextBlockButton = std::make_unique<Button>(
+        Rect{},
+        "▶",
+        buttonStyle
+    );
+
+    _previousBlockButton->setOnClick([this] {
+        selectBlock(-1);
+    });
+    _nextBlockButton->setOnClick([this] {
+        selectBlock(1);
+    });
+
     _rect = rect;
     _preferredRect = rect;
 
@@ -74,19 +79,19 @@ BarView::BarView(
 void BarView::layout() {
     const float width = std::max(0.0f, _rect.size.x);
 
-    _previousBlockRect = {
+    _previousBlockButton->setRect({
         _rect.origin.x + kPadding,
         _rect.origin.y + 12.0f,
         32.0f,
         32.0f
-    };
+    });
 
-    _nextBlockRect = {
+    _nextBlockButton->setRect({
         _rect.origin.x + width - kPadding - 32.0f,
         _rect.origin.y + 12.0f,
         32.0f,
         32.0f
-    };
+    });
 }
 
 void BarView::refreshData() {
@@ -194,34 +199,24 @@ void BarView::selectBlock(const int direction) {
 }
 
 bool BarView::handleEvent(const Event& event) {
-    if (event.type == EventType::MouseMoved) {
-        _mousePosition = event.mouseMove.position;
-        return true;
-    }
-
-    if (event.type != EventType::MouseButtonReleased ||
-        event.mouseButton.button != MouseButton::Left) {
-        return true;
-    }
-
-    const Point position = event.mouseButton.position;
-    _mousePosition = position;
-
     const auto current = std::ranges::find(_blockNames, _selectedBlock);
-    if (current == _blockNames.end()) {
-        return true;
-    }
+    const bool hasSelection = current != _blockNames.end();
+    const auto index = hasSelection
+        ? current - _blockNames.begin()
+        : std::ptrdiff_t{0};
 
-    const auto index = current - _blockNames.begin();
+    const bool canGoPrevious = hasSelection && index > 0;
+    const bool canGoNext = hasSelection &&
+        index + 1 < static_cast<std::ptrdiff_t>(_blockNames.size());
 
-    if (_previousBlockRect.isPointInside(position) && index > 0) {
-        selectBlock(-1);
+    _previousBlockButton->setDisabled(!canGoPrevious);
+    _nextBlockButton->setDisabled(!canGoNext);
+
+    if (!_previousBlockButton->handleEvent(event)) {
         return false;
     }
 
-    if (_nextBlockRect.isPointInside(position) &&
-        index + 1 < static_cast<std::ptrdiff_t>(_blockNames.size())) {
-        selectBlock(1);
+    if (!_nextBlockButton->handleEvent(event)) {
         return false;
     }
 
@@ -280,23 +275,11 @@ void BarView::renderImpl(Window& window) {
     const bool canGoNext = hasSelection &&
         index + 1 < static_cast<std::ptrdiff_t>(_blockNames.size());
 
-    drawBlockArrow(
-        window,
-        _font,
-        _previousBlockRect,
-        "◀",
-        canGoPrevious,
-        canGoPrevious && _previousBlockRect.isPointInside(_mousePosition)
-    );
+    _previousBlockButton->setDisabled(!canGoPrevious);
+    _nextBlockButton->setDisabled(!canGoNext);
 
-    drawBlockArrow(
-        window,
-        _font,
-        _nextBlockRect,
-        "▶",
-        canGoNext,
-        canGoNext && _nextBlockRect.isPointInside(_mousePosition)
-    );
+    _previousBlockButton->render(window);
+    _nextBlockButton->render(window);
 
     const std::string title = hasSelection
         ? _selectedBlock

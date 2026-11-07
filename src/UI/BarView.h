@@ -3,10 +3,12 @@
 
 #include <Q-Tip/QTip.h>
 #include <QTipUIKit/Containers/NavigationView/View.h>
+#include <QTipUIKit/Widgets/Button/Button.h>
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -51,9 +53,8 @@ private:
     std::array<bool, 12> _availableMonths{};
     std::array<bool, 12> _hasBlock{};
 
-    QTip::Rect _previousBlockRect{};
-    QTip::Rect _nextBlockRect{};
-    QTip::Point _mousePosition{};
+    std::unique_ptr<Button> _previousBlockButton;
+    std::unique_ptr<Button> _nextBlockButton;
 
     int _cachedYear = -1;
     float _refreshTimer = 0.0f;

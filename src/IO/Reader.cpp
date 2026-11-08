@@ -221,14 +221,15 @@ std::string Reader::readString() {
 std::string Reader::readString(std::size_t length) {
     require(length);
 
-    std::string result(length, '\0');
-
-    if (length != 0) {
-        for (std::size_t i = 0; i < length; ++i) {
-            result[i] = static_cast<char>(read8());
-        }
+    if (length == 0) {
+        return {};
     }
 
+    std::string result(
+        reinterpret_cast<const char*>(_bytes.data() + _position),
+        length
+    );
+    _position += length;
     return result;
 }
 

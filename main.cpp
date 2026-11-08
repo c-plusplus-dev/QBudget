@@ -72,40 +72,33 @@ void pieViewRenderer(Window& buttonWindow, const Rect& rect) {
 
 void monthsViewRenderer(Window& buttonWindow, const Rect& rect) {
     const float size = std::min(rect.size.x, rect.size.y) - 8.0f;
+    const float halfSize = size / 2.0f;
     const Point center = rect.center();
 
-    const Rect calendar{
-        center.x - size * 0.38f,
-        center.y - size * 0.36f,
-        size * 0.76f,
-        size * 0.72f
-    };
+    const Point tl = center + Point{-halfSize, -halfSize};
+    const Point tr = center + Point{halfSize, -halfSize};
+    const Point bl = center + Point{-halfSize, halfSize};
+    const Point br = center + Point{halfSize, halfSize};
 
     buttonWindow->setRenderColor(Color::white);
-    buttonWindow->renderRoundedRect(calendar, 4);
 
-    buttonWindow->setRenderColor({20, 20, 20});
-    buttonWindow->renderRect({
-        calendar.origin.x + 2.0f,
-        calendar.origin.y + size * 0.18f,
-        calendar.size.x - 4.0f,
-        size * 0.12f
-    });
+    // Outline
+    buttonWindow->renderThickLine({tl, bl}, 2, true);
+    buttonWindow->renderThickLine({tr, br}, 2, true);
+    buttonWindow->renderThickLine({tl, tr}, 2, true);
+    buttonWindow->renderThickLine({bl, br}, 2, true);
 
-    const float dotSize = size * 0.09f;
-    for (int row = 0; row < 2; ++row) {
-        for (int column = 0; column < 3; ++column) {
-            buttonWindow->setRenderColor({20, 20, 20});
-            buttonWindow->renderRoundedRect(
-                {
-                    calendar.origin.x + size * (0.18f + 0.2f * static_cast<float>(column)),
-                    calendar.origin.y + size * (0.39f + 0.2f * static_cast<float>(row)),
-                    dotSize,
-                    dotSize
-                },
-                static_cast<int>(dotSize * 0.5f)
-            );
-        }
+    // Header separator
+    const float headerY = tl.y + size * 0.3f;
+    buttonWindow->renderThickLine(
+        {{tl.x, headerY}, {tr.x, headerY}}, 2, true
+    );
+
+    // Calendar rings
+    for (float x : {center.x - size * 0.22f - 1.0f, center.x + size * 0.22f}) {
+        buttonWindow->renderThickLine(
+            {{x, tl.y - 3}, {x, tl.y + size * 0.12f}}, 3, true
+        );
     }
 }
 
@@ -120,7 +113,7 @@ void barViewRenderer(Window& buttonWindow, const Rect& rect) {
     buttonWindow->renderRoundedRect(
         {
             center.x - size * 0.34f,
-            baseline - size * 0.38f,
+            baseline - size * 0.4f,
             barWidth,
             size * 0.38f
         },

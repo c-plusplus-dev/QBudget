@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -177,10 +176,10 @@ std::vector<Block*> eligibleBlocks(const Database& database) {
             const std::int64_t rhsTotal = rhs->total();
 
             if (lhsTotal != rhsTotal) {
-               return lhsTotal < rhsTotal;
+               return lhsTotal > rhsTotal;
             }
 
-            return lhs->name < rhs->name;
+            return lhs->name > rhs->name;
         }
     );
 
@@ -248,7 +247,6 @@ PieView::PieView(
     );
 
     refresh();
-    layout();
 }
 
 void PieView::refresh() {
@@ -317,8 +315,6 @@ void PieView::rebuildData() {
     _chart->handleEvent(resetHover);
 
     _cachedDatabaseRevision = _database.revision();
-    _chartAnimationRemaining = 1.8f;
-    _chartDirty = true;
 
     _legendScrollView.clear();
     _legendRows.clear();
@@ -433,14 +429,7 @@ void PieView::layout() {
     _chartRect = nextChartRect;
 
     if (chartSizeChanged) {
-        _chart->setRect({
-            0.0f,
-            0.0f,
-            _chartRect.size.x,
-            _chartRect.size.y
-        });
-        _chartCache.reset();
-        _chartDirty = true;
+        _chart->setRect(_chartRect);
     }
 
     if (chartOriginChanged &&
@@ -453,8 +442,6 @@ void PieView::layout() {
         _chartHoveredIndex = kNoEntry;
         _expandedIndex = kNoEntry;
         _rowAnimationActive = true;
-        _chartAnimationRemaining = 0.4f;
-        _chartDirty = true;
     }
 }
 
@@ -524,40 +511,7 @@ bool PieView::handleEvent(const QTip::Event& event) {
         return false;
     }
 
-    QTip::Event chartEvent = event;
-    switch (event.type) {
-    case QTip::EventType::MouseMoved:
-        chartEvent.mouseMove.position =
-            event.mouseMove.position - _chartRect.origin;
-        break;
-
-    case QTip::EventType::MouseButtonPressed:
-    case QTip::EventType::MouseButtonReleased:
-        chartEvent.mouseButton.position =
-            event.mouseButton.position - _chartRect.origin;
-        break;
-
-    default:
-        break;
-    }
-
-    const std::size_t previousHovered = _chart->hoveredIndex();
-    const bool chartPropagate = _chart->handleEvent(chartEvent);
-    const std::size_t currentHovered = _chart->hoveredIndex();
-
-    if (currentHovered != previousHovered) {
-        _chartAnimationRemaining = 0.4f;
-        _chartDirty = true;
-    }
-
-    if ((event.type == QTip::EventType::MouseMoved ||
-         event.type == QTip::EventType::MouseButtonPressed ||
-         event.type == QTip::EventType::MouseButtonReleased) &&
-        (previousHovered != kNoEntry || currentHovered != kNoEntry)) {
-        _chartDirty = true;
-    }
-
-    return chartPropagate;
+    return _chart->handleEvent(event);
 }
 
 void PieView::tick(QTip::Clock& clock, const double dt) {
@@ -566,14 +520,7 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
     _legendScrollView.tick(clock, dt);
 
     const float safeDt = static_cast<float>(std::clamp(dt, 0.0, 0.05));
-    if (_chartAnimationRemaining > 0.0f) {
-        _chart->tick(clock, safeDt);
-        _chartAnimationRemaining = std::max(
-            0.0f,
-            _chartAnimationRemaining - safeDt
-        );
-        _chartDirty = true;
-    }
+    _chart->tick(clock, safeDt);
 
     const std::size_t hovered = _chart->hoveredIndex();
 
@@ -583,7 +530,6 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
         // A new chart hover can trigger automatic scrolling again.
         _manualScrolling = false;
         syncHoveredEntry(true);
-        _chartAnimationRemaining = std::max(_chartAnimationRemaining, 0.4f);
     }
 
     bool rowAnimationChanged = false;
@@ -663,38 +609,7 @@ void PieView::renderImpl(QTip::Window& window) {
     _legendScrollView.render(window);
 
     if (_chartRect.size.x > 20.0f && _chartRect.size.y > 20.0f) {
-        const int cacheWidth = std::max(
-            1,
-            static_cast<int>(std::ceil(_chartRect.size.x))
-        );
-        const int cacheHeight = std::max(
-            1,
-            static_cast<int>(std::ceil(_chartRect.size.y))
-        );
-
-        if (!_chartCache ||
-            _chartCache->size().x != static_cast<float>(cacheWidth) ||
-            _chartCache->size().y != static_cast<float>(cacheHeight)) {
-            _chartCache = std::make_unique<QTip::RenderTexture>(
-                window,
-                cacheWidth,
-                cacheHeight
-            );
-            _chartDirty = true;
-        }
-
-        if (_chartCache->isValid()) {
-            if (_chartDirty) {
-                window->setTarget(*_chartCache);
-                window->setRenderColor(QTip::Color::clear);
-                window->clear();
-                _chart->render(window);
-                window->resetTarget();
-                _chartDirty = false;
-            }
-
-            window->renderTexture(*_chartCache, QTip::Rect::zero, _chartRect);
-        }
+        _chart->render(window);
     }
 
     if (_entries.empty()) {

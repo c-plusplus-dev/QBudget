@@ -7,9 +7,12 @@
 #define QBUDGET_BLOCKVIEW_H
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <QTipUIKit/UIKit.h>
@@ -17,6 +20,7 @@
 
 #include "Storage/Block.h"
 #include "UI/ItemView.h"
+#include "UI/Textures.h"
 
 class BlockView : public UIObject {
 public:
@@ -27,6 +31,8 @@ public:
         QTip::Rect rect,
         Block& block,
         QTip::Font& font,
+        UITextures& textures,
+        ScrollView& parentScrollView,
         Action expandRequested,
         Action deleteRequested,
         Action addRequested
@@ -106,12 +112,12 @@ private:
     void processDeletions();
 
     Block& _block;
+    UITextures& _textures;
+    ScrollView& _parentScrollView;
 
     std::unique_ptr<Button> _delete;
     std::unique_ptr<Button> _expand;
     std::unique_ptr<Button> _add;
-
-    std::unique_ptr<QTip::Texture> _moveTexture;
 
     std::vector<ItemView*> _itemViews;
     std::unique_ptr<ScrollView> _itemScrollView;
@@ -127,6 +133,10 @@ private:
     Action _addRequested;
 
     QTip::Font& _font;
+
+    std::uint64_t _cachedTotalRevision =
+        std::numeric_limits<std::uint64_t>::max();
+    std::string _cachedTotalText;
 };
 
 #endif // QBUDGET_BLOCKVIEW_H

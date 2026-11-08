@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -13,12 +12,14 @@
 #include <QTipUIKit/Internal/Helpers.h>
 
 #include "Spacer.h"
+#include "UI/Visibility.h"
 
 namespace {
 
 constexpr float kPadding = 10.0f;
 constexpr float kGap = 15.0f;
 constexpr float kLegendRowHeight = 58.0f;
+constexpr float kLegendRowSpacing = 8.0f;
 constexpr float kExpandedLegendRowHeight = 86.0f;
 constexpr float kLegendScrollMargin = 20.0f;
 constexpr float kHoverAnimationSpeed = 8.0f;
@@ -33,13 +34,19 @@ public:
         double percent,
         QTip::Color color,
         std::size_t itemCount,
+        ScrollView& parentScrollView,
         QTip::Font& font
     )
         : _name(std::move(name)),
-          _value(value),
-          _percent(percent),
+          _details([&] {
+              std::ostringstream stream;
+              stream << std::fixed << std::setprecision(1)
+                     << (percent * 100.0) << "%  |  " << value << " kr";
+              return stream.str();
+          }()),
+          _itemCountText("Items: " + std::to_string(itemCount)),
           _color(color),
-          _itemCount(itemCount),
+          _parentScrollView(parentScrollView),
           _font(font) {
         _rect = rect;
         _preferredRect = rect;
@@ -88,6 +95,10 @@ public:
 
 protected:
     void renderImpl(QTip::Window& window) override {
+        if (!isVisibleInScrollView(_rect, _parentScrollView)) {
+            return;
+        }
+
         constexpr float normalSwatchSize = 24.0f;
         const float swatchSize = normalSwatchSize + 6.0f * _expandProgress;
 
@@ -113,16 +124,9 @@ protected:
             QTip::Color::white
         );
 
-        std::ostringstream details;
-        details << std::fixed << std::setprecision(1)
-                << (_percent * 100.0) << "%  |  "
-                << _value << " kr";
-
-        const std::string detailsText = details.str();
-
         window->renderText(
             _font,
-            detailsText.c_str(),
+            _details.c_str(),
             textX,
             detailsY,
             QTip::Color{180, 180, 180}
@@ -131,10 +135,9 @@ protected:
         if (_expandProgress > 0.35f) {
             const float fade = std::clamp((_expandProgress - 0.35f) / 0.65f, 0.0f, 1.0f);
             const auto alpha = static_cast<std::uint8_t>(205.0f * fade);
-            const std::string itemText = "Items: " + std::to_string(_itemCount);
             window->renderText(
                 _font,
-                itemText.c_str(),
+                _itemCountText.c_str(),
                 textX,
                 _rect.origin.y + 57.0f,
                 QTip::Color{205, 205, 205, alpha}
@@ -144,10 +147,10 @@ protected:
 
 private:
     std::string _name;
-    std::int64_t _value;
-    double _percent;
+    std::string _details;
+    std::string _itemCountText;
     QTip::Color _color;
-    std::size_t _itemCount = 0;
+    ScrollView& _parentScrollView;
     QTip::Font& _font;
     float _expandProgress = 0.0f;
 };
@@ -173,10 +176,10 @@ std::vector<Block*> eligibleBlocks(const Database& database) {
             const std::int64_t rhsTotal = rhs->total();
 
             if (lhsTotal != rhsTotal) {
-               return lhsTotal < rhsTotal;
+               return lhsTotal > rhsTotal;
             }
 
-            return lhs->name < rhs->name;
+            return lhs->name > rhs->name;
         }
     );
 
@@ -244,7 +247,6 @@ PieView::PieView(
     );
 
     refresh();
-    layout();
 }
 
 void PieView::refresh() {
@@ -253,32 +255,13 @@ void PieView::refresh() {
 }
 
 void PieView::refreshDataIfNeeded() {
-    const std::vector<Block*> currentBlocks = eligibleBlocks(_database);
-
-    if (currentBlocks.size() != _entries.size()) {
-        rebuildData();
+    // Database revisions include block and item edits, so this avoids
+    // repeatedly sorting and comparing every item on every frame.
+    if (_cachedDatabaseRevision == _database.revision()) {
         return;
     }
 
-    for (std::size_t i = 0; i < currentBlocks.size(); ++i) {
-        auto current = currentBlocks[i];
-        const Entry& previous = _entries[i];
-
-        if (current->name != previous.block->name ||
-            current->total() != previous.value ||
-            current->items.size() != previous.block->items.size()) {
-            rebuildData();
-            return;
-        }
-
-        for (std::size_t itemIndex = 0; itemIndex < current->items.size(); ++itemIndex) {
-            if (current->items[itemIndex]->name != previous.block->items[itemIndex]->name ||
-                current->items[itemIndex]->cost != previous.block->items[itemIndex]->cost) {
-                rebuildData();
-                return;
-            }
-        }
-    }
+    rebuildData();
 }
 
 void PieView::rebuildData() {
@@ -324,11 +307,21 @@ void PieView::rebuildData() {
 
     _chart->setData(std::move(chartItems));
 
+    // PieChart currently retains its previous hovered index across setData().
+    // Clear it before the old Block pointers can become invalid.
+    QTip::Event resetHover{};
+    resetHover.type = QTip::EventType::MouseMoved;
+    resetHover.mouseMove.position = {-10000.0f, -10000.0f};
+    _chart->handleEvent(resetHover);
+
+    _cachedDatabaseRevision = _database.revision();
+
     _legendScrollView.clear();
     _legendRows.clear();
     _chartHoveredIndex = kNoEntry;
     _expandedIndex = kNoEntry;
     _rowExpandProgress.assign(_entries.size(), 0.0f);
+    _rowAnimationActive = false;
 
     for (const auto & entry : _entries) {
         auto& row = _legendScrollView.add<PieLegendRow>(
@@ -338,6 +331,7 @@ void PieView::rebuildData() {
             entry.percent,
             entry.color,
             entry.block->items.size(),
+            _legendScrollView,
             _font
         );
 
@@ -358,12 +352,20 @@ void PieView::layout() {
     const float contentHeight =
         std::max(0.0f, height - 2.0f * kPadding);
 
-    _legendScrollView.setRect({
-        kPadding,
-        kPadding,
+    const QTip::Rect legendRect{
+        _rect.origin.x + kPadding,
+        _rect.origin.y + kPadding,
         columnWidth,
         contentHeight
-    });
+    };
+    const QTip::Rect& currentLegendRect = _legendScrollView.rect();
+
+    if (currentLegendRect.origin.x != legendRect.origin.x ||
+        currentLegendRect.origin.y != legendRect.origin.y ||
+        currentLegendRect.size.x != legendRect.size.x ||
+        currentLegendRect.size.y != legendRect.size.y) {
+        _legendScrollView.setRect(legendRect);
+    }
 
     float rowY = 0.0f;
     for (std::size_t i = 0; i < _legendRows.size(); ++i) {
@@ -374,23 +376,73 @@ void PieView::layout() {
         const float rowHeight = kLegendRowHeight
             + (kExpandedLegendRowHeight - kLegendRowHeight) * progress;
 
-        row->setRect({0.0f, rowY, columnWidth, rowHeight});
+        const QTip::Rect rowRect{0.0f, rowY, columnWidth, rowHeight};
+        const QTip::Rect& currentRowRect = row->rect();
+
+        if (currentRowRect.origin.x != rowRect.origin.x ||
+            currentRowRect.origin.y != rowRect.origin.y ||
+            currentRowRect.size.x != rowRect.size.x ||
+            currentRowRect.size.y != rowRect.size.y) {
+            row->setRect(rowRect);
+        }
+
         row->setExpandProgress(progress);
-        rowY += rowHeight;
+        rowY += rowHeight + kLegendRowSpacing;
     }
 
-    _legendScrollView.setContentSize({
-        std::max(1.0f, columnWidth),
-        std::max(1.0f, rowY)
-    });
+    // Reserve the largest possible row expansion up front. This keeps the
+    // ScrollView's backing RenderTexture stable while a legend row animates.
+    const float maximumContentHeight =
+        static_cast<float>(_legendRows.size()) *
+            (kLegendRowHeight + kLegendRowSpacing) +
+        kLegendRowHeight +
+        (_legendRows.empty()
+            ? 0.0f
+            : kExpandedLegendRowHeight - kLegendRowHeight);
 
-    const float chartX = _rect.origin.x + kPadding + columnWidth + kGap;
-    _chart->setRect({
-        chartX,
-        kPadding,
+    const QTip::Point legendContentSize{
+        std::max(1.0f, columnWidth),
+        std::max(1.0f, maximumContentHeight)
+    };
+    const QTip::Point currentContentSize =
+        _legendScrollView.contentSize();
+
+    if (currentContentSize.x != legendContentSize.x ||
+        currentContentSize.y != legendContentSize.y) {
+        _legendScrollView.setContentSize(legendContentSize);
+    }
+
+    const QTip::Rect nextChartRect{
+        _rect.origin.x + kPadding + columnWidth + kGap,
+        _rect.origin.y + kPadding,
         columnWidth,
         contentHeight
-    });
+    };
+
+    const bool chartSizeChanged =
+        nextChartRect.size.x != _chartRect.size.x ||
+        nextChartRect.size.y != _chartRect.size.y;
+    const bool chartOriginChanged =
+        nextChartRect.origin.x != _chartRect.origin.x ||
+        nextChartRect.origin.y != _chartRect.origin.y;
+
+    _chartRect = nextChartRect;
+
+    if (chartSizeChanged) {
+        _chart->setRect(_chartRect);
+    }
+
+    if (chartOriginChanged &&
+        _chart->hoveredIndex() != kNoEntry) {
+        QTip::Event resetHover{};
+        resetHover.type = QTip::EventType::MouseMoved;
+        resetHover.mouseMove.position = {-10000.0f, -10000.0f};
+        _chart->handleEvent(resetHover);
+
+        _chartHoveredIndex = kNoEntry;
+        _expandedIndex = kNoEntry;
+        _rowAnimationActive = true;
+    }
 }
 
 void PieView::syncHoveredEntry(const bool scrollToEntry) {
@@ -400,6 +452,7 @@ void PieView::syncHoveredEntry(const bool scrollToEntry) {
     }
 
     _expandedIndex = _chartHoveredIndex;
+    _rowAnimationActive = true;
     if (_expandedIndex != kNoEntry && scrollToEntry) {
         scrollEntryIntoView(_expandedIndex);
     }
@@ -465,7 +518,9 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
     refreshDataIfNeeded();
 
     _legendScrollView.tick(clock, dt);
-    _chart->tick(clock, dt);
+
+    const float safeDt = static_cast<float>(std::clamp(dt, 0.0, 0.05));
+    _chart->tick(clock, safeDt);
 
     const std::size_t hovered = _chart->hoveredIndex();
 
@@ -474,26 +529,30 @@ void PieView::tick(QTip::Clock& clock, const double dt) {
 
         // A new chart hover can trigger automatic scrolling again.
         _manualScrolling = false;
-
         syncHoveredEntry(true);
     }
 
-    const float safeDt = static_cast<float>(std::clamp(dt, 0.0, 0.05));
-    const float hoverStep = std::min(1.0f, kHoverAnimationSpeed * safeDt);
     bool rowAnimationChanged = false;
+    if (_rowAnimationActive) {
+        const float hoverStep = std::min(1.0f, kHoverAnimationSpeed * safeDt);
 
-    for (std::size_t i = 0; i < _rowExpandProgress.size(); ++i) {
-        const float target = i == _expandedIndex ? 1.0f : 0.0f;
-        float& progress = _rowExpandProgress[i];
-        const float next = progress + (target - progress) * hoverStep;
-        if (std::abs(target - next) < 0.002f) {
-            progress = target;
-        } else {
-            progress = next;
+        for (std::size_t i = 0; i < _rowExpandProgress.size(); ++i) {
+            const float target = i == _expandedIndex ? 1.0f : 0.0f;
+            float& progress = _rowExpandProgress[i];
+            const float next = progress + (target - progress) * hoverStep;
+
+            if (std::abs(target - next) < 0.002f) {
+                progress = target;
+            } else {
+                progress = next;
+            }
+
+            if (std::abs(progress - target) > 0.002f) {
+                rowAnimationChanged = true;
+            }
         }
-        if (std::abs(progress - target) > 0.002f) {
-            rowAnimationChanged = true;
-        }
+
+        _rowAnimationActive = rowAnimationChanged;
     }
 
     const QTip::Point currentScroll = _legendScrollView.scrollPosition();
@@ -549,8 +608,7 @@ const QTip::Rect& PieView::rect() {
 void PieView::renderImpl(QTip::Window& window) {
     _legendScrollView.render(window);
 
-    if (_chart->rect().size.x > 20.0f &&
-        _chart->rect().size.y > 20.0f) {
+    if (_chartRect.size.x > 20.0f && _chartRect.size.y > 20.0f) {
         _chart->render(window);
     }
 
@@ -558,8 +616,8 @@ void PieView::renderImpl(QTip::Window& window) {
         window->renderText(
             _font,
             "No positive block totals",
-            _rect.size.x * 0.5f - 100.0f,
-            _rect.size.y * 0.5f,
+            _rect.origin.x + _rect.size.x * 0.5f - 100.0f,
+            _rect.origin.y + _rect.size.y * 0.5f,
             QTip::Color{160, 160, 160}
         );
     }

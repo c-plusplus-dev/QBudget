@@ -79,6 +79,7 @@ void MonthsView::refreshData() {
     for (auto& tile : _tiles) {
         tile.available = false;
         tile.total = 0;
+        tile.detail = "No saved data";
     }
 
     for (const int month : _manager.availableMonths(_selectedYear)) {
@@ -94,7 +95,12 @@ void MonthsView::refreshData() {
         MonthTile& tile = _tiles[static_cast<std::size_t>(month - 1)];
         tile.available = true;
         tile.total = database->total();
+        tile.detail = std::to_string(tile.total) + " kr";
     }
+
+    _cachedYear = _selectedYear;
+    _cachedYearText = std::to_string(_selectedYear);
+    _cachedManagerRevision = _manager.revision();
 }
 
 void MonthsView::layout() {
@@ -239,11 +245,9 @@ bool MonthsView::handleEvent(const Event& event) {
     return true;
 }
 
-void MonthsView::tick(Clock&, const double dt) {
-    _refreshTimer += static_cast<float>(std::max(0.0, dt));
-
-    if (_refreshTimer >= 0.5f) {
-        _refreshTimer = 0.0f;
+void MonthsView::tick(Clock&, double) {
+    if (_cachedYear != _selectedYear ||
+        _cachedManagerRevision != _manager.revision()) {
         refreshData();
     }
 }
@@ -296,12 +300,11 @@ void MonthsView::renderImpl(Window& window) {
     _nextYearButton->render(window);
 
     const Rect& previousYearRect = _previousYearButton->rect();
-    const std::string yearText = std::to_string(_selectedYear);
-    const float yearTextWidth = static_cast<float>(yearText.size()) * 9.6f;
+    const float yearTextWidth = static_cast<float>(_cachedYearText.size()) * 9.6f;
 
     window->renderText(
         _font,
-        yearText.c_str(),
+        _cachedYearText.c_str(),
         previousYearRect.origin.x + 36.0f +
             (42.0f - yearTextWidth) * 0.5f,
         _rect.origin.y + 17.0f,
@@ -338,23 +341,17 @@ void MonthsView::renderImpl(Window& window) {
             ? Color::white
             : Color{115, 115, 115};
 
-        const std::string monthName{MonthPalette::names[i]};
-
         window->renderText(
             _font,
-            monthName.c_str(),
+            MonthPalette::names[i].data(),
             tile.rect.origin.x + 16.0f,
             tile.rect.origin.y + 12.0f,
             primary
         );
 
-        const std::string detail = tile.available
-            ? std::to_string(tile.total) + " kr"
-            : "No saved data";
-
         window->renderText(
             _font,
-            detail.c_str(),
+            tile.detail.c_str(),
             tile.rect.origin.x + 16.0f,
             tile.rect.origin.y + 43.0f,
             tile.available ? Color{185, 185, 185} : Color{95, 95, 95}

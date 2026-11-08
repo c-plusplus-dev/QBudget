@@ -30,8 +30,6 @@ void Writer::writeUnsigned(
         );
     }
 
-    _bytes.reserve(_bytes.size() + byteCount);
-
     if (_endian == Endian::Little) {
         for (std::size_t i = 0; i < byteCount; ++i) {
             const auto shift = static_cast<unsigned int>(i * 8);

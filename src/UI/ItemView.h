@@ -8,11 +8,14 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 
 #include <QTipUIKit/UIKit.h>
 #include <QTipUIKit/Widgets/Button/MagickButton.h>
+#include <QTipUIKit/Containers/ScrollView.h>
 
 #include "Storage/Block.h"
+#include "UI/Textures.h"
 
 class ItemView : public UIObject {
 public:
@@ -22,6 +25,8 @@ public:
         QTip::Rect rect,
         Block::Item& item,
         QTip::Font& font,
+        UITextures& textures,
+        ScrollView& parentScrollView,
         Action onEdit,
         Action onDelete
     );
@@ -46,6 +51,7 @@ protected:
 
 private:
     friend class BlocksView;
+    friend class BlockView;
 
     void updateLayout();
 
@@ -53,12 +59,13 @@ private:
 
     Block::Item* _item = nullptr;
     QTip::Font& _font;
+    std::string _cachedName;
+    std::string _cachedCostText;
+    UITextures& _textures;
+    ScrollView& _parentScrollView;
 
     std::unique_ptr<Button> _deleteButton;
     std::unique_ptr<MagickButton> _editButton;
-
-    std::unique_ptr<QTip::Texture> _editButtonTexture;
-    std::unique_ptr<QTip::Texture> _moveTexture;
 
     Action _onEdit;
     Action _onDelete;

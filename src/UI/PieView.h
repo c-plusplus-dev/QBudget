@@ -2,10 +2,13 @@
 #define QBUDGET_UI_PIEVIEW_H
 
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <vector>
 
 #include <Q-Tip/QTip.h>
+#include <Q-Tip/Graphics/RenderTexture.h>
 
 #include <QTipUIKit/Containers/NavigationView/View.h>
 #include <QTipUIKit/Containers/ScrollView.h>
@@ -48,10 +51,13 @@ private:
     QTip::Font& _font;
     ScrollView _legendScrollView;
     std::unique_ptr<PieChart<Block*>> _chart;
+    QTip::Rect _chartRect{};
+    bool _rowAnimationActive = false;
     std::vector<Entry> _entries;
     std::vector<UIObject*> _legendRows;
     std::vector<float> _rowExpandProgress;
 
+    std::uint64_t _cachedDatabaseRevision = std::numeric_limits<std::uint64_t>::max();
     std::size_t _chartHoveredIndex = kNoEntry;
     std::size_t _expandedIndex = kNoEntry;
     float _targetScrollY = 0.0f;

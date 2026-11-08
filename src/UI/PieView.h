@@ -51,10 +51,7 @@ private:
     QTip::Font& _font;
     ScrollView _legendScrollView;
     std::unique_ptr<PieChart<Block*>> _chart;
-    std::unique_ptr<QTip::RenderTexture> _chartCache;
     QTip::Rect _chartRect{};
-    bool _chartDirty = true;
-    float _chartAnimationRemaining = 0.0f;
     bool _rowAnimationActive = false;
     std::vector<Entry> _entries;
     std::vector<UIObject*> _legendRows;

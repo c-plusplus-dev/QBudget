@@ -225,12 +225,10 @@ int main(int argc, char* argv[]) {
                     selectedMonth,
                     selectedYear,
                     [&] {
-                        manager.saveAll();
-                        activeDatabase = &manager.getOrCreate(
-                            selectedYear,
-                            selectedMonth
-                        );
-                        rebuildRoot = true;
+                        if (auto db = manager.get(selectedYear, selectedMonth)) {
+                            activeDatabase = db;
+                            rebuildRoot = true;
+                        }
                     }
                 );
             },

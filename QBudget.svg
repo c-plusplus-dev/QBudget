@@ -13,7 +13,7 @@
         <rect width="512" height="512" fill="#435262"/>
 
         <!-- Q symbol -->
-        <circle cx="240" cy="235" r="145"
+        <circle cx="250" cy="250" r="175"
                 fill="none"
                 stroke="#B8FF5C"
                 stroke-width="48"/>
@@ -27,9 +27,9 @@
 
         <!-- Ledger lines -->
         <g fill="#FFFFFF">
-            <rect x="174" y="188" width="132" height="30" rx="8.5"/>
-            <rect x="174" y="226" width="132" height="30" rx="8.5"/>
-            <rect x="174" y="264" width="132" height="30" rx="8.5"/>
+            <rect x="184" y="197" width="132" height="30" rx="8.5"/>
+            <rect x="184" y="235" width="132" height="30" rx="8.5"/>
+            <rect x="184" y="273" width="132" height="30" rx="8.5"/>
         </g>
     </g>
 </svg>

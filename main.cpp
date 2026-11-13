@@ -144,8 +144,7 @@ void barViewRenderer(Window& buttonWindow, const Rect& rect) {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    const std::filesystem::path assetDirectory =
-        getExecutableDirectory(argc, argv) / "assets";
+    std::filesystem::path assetDirectory = getAssetDirectory(getExecutableDirectory(argc, argv));
 
     --argc; // Remove the executable name.
     ++argv; // Skip the executable name.
@@ -153,6 +152,7 @@ int main(int argc, char* argv[]) {
     bool dev = false;
     if (argc >= 1 && std::string(argv[0]) == "-dev") {
         dev = true;
+        assetDirectory = "assets";
     }
 
     ModLoader::load<UIKitMod>();

@@ -91,4 +91,22 @@ inline std::filesystem::path getExecutableDirectory(
     return error ? std::filesystem::path{} : current;
 }
 
+inline std::filesystem::path getAssetDirectory(
+    const std::filesystem::path& executableDirectory
+) {
+#ifdef _WIN32
+    return executableDirectory / "assets";
+
+#elif defined(__APPLE__)
+    return executableDirectory.parent_path() / "Resources" / "assets";
+
+#elif defined(__linux__)
+    return executableDirectory / "assets";
+
+#else
+    return executableDirectory / "assets";
+#endif
+    return executableDirectory / "assets";
+}
+
 #endif // QBUDGET_PLATFORM_H

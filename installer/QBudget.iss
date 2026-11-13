@@ -1,25 +1,29 @@
 
 #define AppName "QBudget"
-#define AppVersion "0.1.0"
+#define AppVersion "1.0.0"
 
 [Setup]
 AppId=QBudget
 AppName={#AppName}
 AppVersion={#AppVersion}
-AppPublisher=QBudget
+AppPublisher=c-plusplus-dev
 
 DefaultDirName={localappdata}\Programs\QBudget
 DefaultGroupName=QBudget
 
 PrivilegesRequired=lowest
 
-; QBudget is currently built for Windows x64.
+; QBudget currently targets Windows x64.
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 OutputDir=..\dist
 OutputBaseFilename=QBudget-Setup
 
+; Installer executable icon.
+SetupIconFile=QBudget-Installer.ico
+
+; Installed application and uninstall entry.
 UninstallDisplayName=QBudget
 UninstallDisplayIcon={app}\QBudget.exe
 
